@@ -1,0 +1,11 @@
+= Pretty-Printers/Parsers
+
+[source,ml]
+----
+  > let pp = PPP.OCaml.(array (pair (list int) bool)) in
+  > PPP.to_string pp [| ([1;2;3], true) ; ([], false) |]
+    "[|([1;2;3],true);([],false)|]"
+  > PPP.of_string pp "[|([1;2;3],true);([],false)|]"
+    [| ([1;2;3], true) ; ([], false) |]
+----
+

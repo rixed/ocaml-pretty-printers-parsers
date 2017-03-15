@@ -1,0 +1,13 @@
+opam-version: "1.2"
+name: "ppp"
+version: "0.1"
+maintainer: "Cedric Cellier <rixed@happyleptic.org>"
+authors: "Cedric Cellier <rixed@happyleptic.org>"
+build: [ [make] ]
+build-test: [ [make "check"] ]
+install: [make "install"]
+remove: ["ocamlfind" "remove" "ppp"]
+depends: [
+  "ocamlfind" {build}
+  "qcheck" {test}
+]
