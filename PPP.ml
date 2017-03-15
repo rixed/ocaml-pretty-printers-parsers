@@ -504,9 +504,9 @@ struct
     type person = { name: string ; age: int ; male : bool }
 
     let person : person t =
-      record ((field "name" string) <-> (field "age" int) <->
-              (field "male" ~default:true bool)) >>:
-        ((fun { name ; age ; male } -> ((name, age), male)),
+      record (field "name" string <-> field "age" int <->
+              field "male" ~default:true bool) >>:
+        ((fun { name ; age ; male } -> (name, age), male),
          (fun ((name, age), male) -> { name ; age ; male }))
    *)
   (*$= person & ~printer:id
@@ -573,7 +573,7 @@ struct
                | Transparent
 
     let color : color t = union (
-      (variant "RGB" (triple int int int)) ||| (variant "Named" string) ||| (variant "Transp" none)) >>:
+      variant "RGB" (triple int int int) ||| variant "Named" string ||| variant "Transp" none) >>:
       ((function RGB rgb -> Some (Some rgb, None), None
                | Named name -> Some (None, Some name), None
                | Transparent -> None, Some ()),
