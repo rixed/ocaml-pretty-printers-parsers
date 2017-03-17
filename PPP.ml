@@ -8,13 +8,14 @@ let to_out_channel chan (p,_) v = p v (output_string chan)
 let to_stdout pp v = to_out_channel stdout pp v
 let to_stderr pp v = to_out_channel stderr pp v
 
+let string_reader s o l =
+  if o + l > String.length s then
+    String.sub s o (String.length s - o)
+  else
+    String.sub s o l
+
 let of_string (_,p) s =
-  let i o l =
-    if o + l > String.length s then
-      String.sub s o (String.length s - o)
-    else
-      String.sub s o l in
-  p i
+  p (string_reader s)
 
 let next_eq w i o =
   if i o (String.length w) = w then
@@ -24,6 +25,28 @@ let next_eq w i o =
 
 let is_letter c = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 let is_digit c = c >= '0' && c <= '9'
+let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r'
+let zero = Char.code '0'
+let str_is_digit s = String.length s > 0 && is_digit s.[0]
+let digit_of s = Char.code s.[0] - zero
+
+let rec chop_sub s b e =
+  if b >= e then "" else
+  if is_blank s.[b] then chop_sub s (b+1) e else
+  if is_blank s.[e-1] then chop_sub s b (e-1) else
+  String.sub s b (e-b)
+(*$inject let id x = x *)
+(*$= chop_sub & ~printer:id
+  "glop" (chop_sub "glop" 0 4)
+  "glop" (chop_sub " glop" 0 5)
+  "glop" (chop_sub "glop " 0 5)
+  "glop" (chop_sub "glop	" 0 5)
+  "glop" (chop_sub "  glop" 0 6)
+  "glop" (chop_sub "	 	glop " 0 8)
+  "" (chop_sub "" 0 0)
+  "" (chop_sub " " 0 1)
+  "" (chop_sub " " 1 1 )
+*)
 
 let next_word_eq w i o =
   match next_eq w i o with
@@ -33,6 +56,94 @@ let next_word_eq w i o =
      let c = sep.[0] in
      not (is_letter c || is_digit c || c = '_')), o
   | x -> x
+
+let string_of lst len =
+  let s = Bytes.create len in
+  let rec loop i lst =
+    if i >= 0 then (
+      Bytes.set s i (List.hd lst) ;
+      loop (i-1) (List.tl lst)
+    ) in
+  loop (len-1) lst ;
+  Bytes.to_string s
+(*$= string_of & ~printer:id
+  "glop" (string_of ['p';'o';'l';'g'] 4)
+  "" (string_of [] 0)
+ *)
+
+let seq opn cls sep iteri of_rev_list (p, s) =
+  (fun v o ->
+    o opn ;
+    iteri (fun i v' ->
+      if i > 0 then o sep ;
+      p v' o) v ;
+    o cls),
+  (fun i o ->
+    let rec parse_sep prev o =
+      if i o (String.length cls) = cls then
+        Some (of_rev_list prev, o + String.length cls)
+      else if i o (String.length sep) = sep then
+        parse_item prev (o + String.length sep)
+      else
+        None
+    and parse_item prev o =
+      match s i o with
+      | None -> None
+      | Some (x, o') -> parse_sep (x::prev) o' in
+    if i o (String.length opn) = opn then (
+      if i (o + String.length opn) (String.length cls) = cls then
+        Some (of_rev_list [], o + String.length opn + String.length cls)
+      else
+        parse_item [] (o + String.length opn)
+    ) else None)
+
+
+let (++) (p1, s1) (p2, s2) =
+  (fun (v1, v2) o ->
+    p1 v1 o ;
+    p2 v2 o),
+  (fun i o ->
+    match s1 i o with
+    | None -> None
+    | Some (v1, o) ->
+      (match s2 i o with
+      | None -> None
+      | Some (v2, o) -> Some ((v1, v2), o)))
+
+let (-+) (p1, s1) (p2, s2) =
+  (fun v2 o ->
+    p1 () o ;
+    p2 v2 o),
+  (fun i o ->
+    match s1 i o with
+    | None -> None
+    | Some ((), o) -> s2 i o)
+
+let (+-) (p1, s1) (p2, s2) =
+  (fun v1 o ->
+    p1 v1 o ;
+    p2 () o),
+  (fun i o ->
+    match s1 i o with
+    | None -> None
+    | Some (v, o) ->
+      (match s2 i o with
+      | None -> None
+      | Some (_, o) -> Some (v, o)))
+
+let cst s =
+  (fun () (o: string->unit) -> o s),
+  (fun i o ->
+    let l = String.length s in
+    if i o l = s then Some ((), o+l) else None)
+
+let (>>:) (p, s) (f,f') =
+  (fun v o -> p (f v) o),
+  (fun i o ->
+    match s i o with
+    | None -> None
+    | Some (x, o) -> Some (f' x, o))
+
 
 module OCaml=
 struct
@@ -47,7 +158,7 @@ struct
         | true, o -> Some (false, o)
         | _ -> None)
       | x -> Some x)
-(*$= bool & ~printer:(fun x -> x)
+(*$= bool & ~printer:id
   "true" (to_string bool true)
   "false" (to_string bool false)
  *)
@@ -56,9 +167,6 @@ struct
   (Some (false, 5)) (of_string bool "false" 0)
 *)
 
-  let zero = Char.code '0'
-  let str_is_digit s = String.length s > 0 && is_digit s.[0]
-  let digit_of s = Char.code s.[0] - zero
   (* General format: [sign] digits *)
   type int_part = IntStart | Int
   let int =
@@ -73,7 +181,7 @@ struct
         | _ -> oo, s, n in
       let oo, s, n = loop o o 1 0 IntStart in
       if oo > o then Some (s*n, oo) else None)
-(*$= int & ~printer:(fun x -> x)
+(*$= int & ~printer:id
   "42" (to_string int 42)
   "-42" (to_string int (-42))
   "0" (to_string int 0)
@@ -113,7 +221,7 @@ struct
       if oo > o then Some (
         float_of_int (s * n) *. 10. ** float_of_int (es * exp - sc), oo)
       else None)
-(*$= float & ~printer:(fun x -> x)
+(*$= float & ~printer:id
   "-0.00010348413604" (to_string float (-0.00010348413604))
  *)
 (*$= float & ~printer:(function None -> "" | Some (f,i) -> Printf.sprintf "(%f, %d)" f i)
@@ -135,22 +243,8 @@ struct
   (Some (-0.00010348413604, 17)) (of_string float "-0.00010348413604" 0)
  *)
  
-  type string_part = First | Char | BackslashStart | Backslash
-  let string_of lst len =
-    let s = Bytes.create len in
-    let rec loop i lst =
-      if i >= 0 then (
-        Bytes.set s i (List.hd lst) ;
-        loop (i-1) (List.tl lst)
-      ) in
-    loop (len-1) lst ;
-    Bytes.to_string s
-  (*$= string_of & ~printer:(fun x -> x)
-    "glop" (string_of ['p';'o';'l';'g'] 4)
-    "" (string_of [] 0)
-   *)
-
   (* Format: "..." *)
+  type string_part = First | Char | BackslashStart | Backslash
   let string =
     (fun v o -> o (Printf.sprintf "%S" v)),
     (fun i o ->
@@ -183,7 +277,7 @@ struct
           )
         | _ -> None (* everything else is game-over *) in
       loop o [] 0 0 First)
-  (*$= string & ~printer:(fun x -> x)
+  (*$= string & ~printer:id
      "\"glop\"" (to_string string "glop")
      "\"\"" (to_string string "")
      "\"\\207\"" (to_string string "\207")
@@ -194,34 +288,8 @@ struct
     (Some ("\207", 6)) (of_string string "\"\\207\"" 0)
    *)
 
-  let seq opn cls sep iteri of_rev_list (p, s) =
-    (fun v o ->
-      o opn ;
-      iteri (fun i v' ->
-        if i > 0 then o sep ;
-        p v' o) v ;
-      o cls),
-    (fun i o ->
-      let rec parse_sep prev o =
-        if i o (String.length cls) = cls then
-          Some (of_rev_list prev, o + String.length cls)
-        else if i o (String.length sep) = sep then
-          parse_item prev (o + String.length sep)
-        else
-          None
-      and parse_item prev o =
-        match s i o with
-        | None -> None
-        | Some (x, o') -> parse_sep (x::prev) o' in
-      if i o (String.length opn) = opn then (
-        if i (o + String.length opn) (String.length cls) = cls then
-          Some (of_rev_list [], o + String.length opn + String.length cls)
-        else
-          parse_item [] (o + String.length opn)
-      ) else None)
-
-  let list item = seq "[" "]" ";" List.iteri List.rev item
-  (*$= list & ~printer:(fun x -> x)
+  let list p = seq "[" "]" ";" List.iteri List.rev p
+  (*$= list & ~printer:id
      "[]" (to_string (list int) [])
      "[1;2;3]" (to_string (list int) [1;2;3])
    *)
@@ -230,8 +298,8 @@ struct
     (Some ([1;2;3], 7)) (of_string (list int) "[1;2;3]" 0)
    *)
 
-  let array item = seq "[|" "|]" ";" Array.iteri (fun l -> Array.of_list (List.rev l)) item
-  (*$= array & ~printer:(fun x -> x)
+  let array p = seq "[|" "|]" ";" Array.iteri (fun l -> Array.of_list (List.rev l)) p
+  (*$= array & ~printer:id
      "[||]" (to_string (array string) [||])
      "[|\"[\";\"|\";\";\"|]" (to_string (array string) [| "["; "|"; ";" |])
    *)
@@ -239,52 +307,6 @@ struct
     (Some ([||], 4)) (of_string (array string) "[||]" 0)
     (Some ([| "1" ; "2" |], 11)) (of_string (array string) "[|\"1\";\"2\"|]" 0)
    *)
-
-  let (++) (p1, s1) (p2, s2) =
-    (fun (v1, v2) o ->
-      p1 v1 o ;
-      p2 v2 o),
-    (fun i o ->
-      match s1 i o with
-      | None -> None
-      | Some (v1, o) ->
-        (match s2 i o with
-        | None -> None
-        | Some (v2, o) -> Some ((v1, v2), o)))
-
-  let (-+) (p1, s1) (p2, s2) =
-    (fun v2 o ->
-      p1 () o ;
-      p2 v2 o),
-    (fun i o ->
-      match s1 i o with
-      | None -> None
-      | Some ((), o) -> s2 i o)
-
-  let (+-) (p1, s1) (p2, s2) =
-    (fun v1 o ->
-      p1 v1 o ;
-      p2 () o),
-    (fun i o ->
-      match s1 i o with
-      | None -> None
-      | Some (v, o) ->
-        (match s2 i o with
-        | None -> None
-        | Some (_, o) -> Some (v, o)))
-
-  let cst s =
-    (fun () (o: string->unit) -> o s),
-    (fun i o ->
-      let l = String.length s in
-      if i o l = s then Some ((), o+l) else None)
-
-  let (>>:) (p, s) (f,f') =
-    (fun v o -> p (f v) o),
-    (fun i o ->
-      match s i o with
-      | None -> None
-      | Some (x, o) -> Some (f' x, o))
 
   module Tuple = struct
     let first p = cst "(" -+ p
@@ -309,7 +331,7 @@ struct
   end
 
   let pair = Tuple.tuple2
-  (*$= pair & ~printer:(fun x -> x)
+  (*$= pair & ~printer:id
      "(1,2)" (to_string (pair int int) (1,2))
      "(\"a\",2)" (to_string (pair string int) ("a", 2))
      "[|([],true)|]" (to_string (array (pair (list int) bool)) [|([],true)|])
@@ -320,7 +342,7 @@ struct
    *)
 
   let triple = Tuple.tuple3
-  (*$= triple & ~printer:(fun x -> x)
+  (*$= triple & ~printer:id
      "(1,2.1,\"a\")" (to_string (triple int float string) (1, 2.1, "a"))
      "(1,(1,2),3)" (to_string (triple int (pair int int) int) (1, (1,2), 3))
    *)
@@ -329,41 +351,153 @@ struct
     (Some ((0,"",0), 8)) (of_string (triple int string int) "(0,\"\",0)" 0)
    *)
 
-  (* Records: We can't do it in general but we can help build specific ones.
-   * Notes: Fields order matters as we return a tuple. *)
-  module Record = struct
-    let field ?(last=false) name (p, s) =
-      (fun v o ->
-        o (name ^"=") ;
-        p v o ;
-        o (if last then "}" else ";")),
-      (fun i o ->
-        match next_word_eq name i o with
-        | false, _ -> None
-        | true, o ->
-          if i o 1 <> "=" then None else
-          (match s i (o+1) with
-          | None -> None
-          | Some (v, o) ->
-            if i o 1 <> (if last then "}" else ";") then None else
-            Some (v, o+1)))
-            
-    let first name p = cst "{" -+ field name p
-    let last name p = field ~last:true name p
-  end
+  let rec skip_blanks i o =
+    match i o 1 with
+    | " " -> skip_blanks i (o + 1)
+    | _ -> o
+
+  (* Skip until end of string. Used by skip_any. *)
+  let rec skip_string ?(backslashed=false) i o =
+    match i o 1 with
+    | "\"" -> if backslashed then skip_string i (o+1) else Some (o+1)
+    | "\\" -> skip_string ~backslashed:(not backslashed) i (o + 1)
+    | "" -> None
+    | _ -> skip_string i (o+1)
+
+  let rec skip_delim ?(had_delim=false) i o =
+    match i o 1 with
+    | ("," | ";") when not had_delim -> skip_delim ~had_delim:true i (o+1)
+    | s when String.length s > 0 && is_blank s.[0] -> skip_delim i (o+1)
+    | _ -> if had_delim then Some o else None
+
+  (* To be able to "reorder" records fields we need a function able to tell
+   * us the length of a value, without knowing its type. *)
+  (* format: blanks* opening_char (any value list)* closing_char | everything_but_blanks_or_openeing_or_closing_chars *)
+  let rec skip_any i o =
+    let str = i o 2 in
+    if str = "[|" then skip_group "|]" i (o+2)
+    else if str = "" then Some o else (
+      let c = str.[0] in
+      if c = '(' then skip_group ")" i (o+1)
+      else if c = '[' then skip_group "]" i (o+1)
+      else if c = '{' then skip_group "}" i (o+1)
+      else if c = ')' || c = ']' || c = '}' || c = '|' || c = ';' || c = ',' then Some o
+      else if c = '"' then skip_string i (o+1)
+      else skip_any i (o+1)) (* anything else including blanks is "the value" that we skip *)
+  and skip_group ?(f=(fun _ _ _ -> ())) cls i o =
+    let clsl = String.length cls in
+    match skip_any i o with
+    | None ->
+      (* Maybe we are done? *)
+      if i o clsl = cls then Some (o + clsl) else None
+    | Some o' ->
+      let o'' = skip_blanks i o' in
+      let s = i o'' clsl in
+      if s = cls then (
+        f i o (o'-o) ;
+        Some (o'' + clsl)
+      ) else if s = "" then None
+      else if s.[0] = ',' || s.[0] = ';' then (
+        f i o (o'-o) ;
+        skip_group ~f cls i (o'' + 1)
+      ) else None
+  (*$= skip_any & ~printer:(function None -> "" | Some o -> string_of_int o)
+    (Some 4) (skip_any (string_reader "glop") 0)
+    (Some 8) (skip_any (string_reader "pas glop]") 0)
+    (Some 6) (skip_any (string_reader "(glop)") 0)
+    (Some 8) (skip_any (string_reader "[|glop|]") 0)
+    (Some 2) (skip_any (string_reader "()") 0)
+    (Some 7) (skip_any (string_reader "[1;2;3]") 0)
+    (Some 13) (skip_any (string_reader "[ 1 ; 2 ; 3 ]") 0)
+    (Some 10) (skip_any (string_reader " \"bl\\\"a][\" z") 0)
+
+    (Some 26) (skip_any (string_reader "{ a = 43 ; glop=(1, 2 ); } ") 0)
+    None (skip_any (string_reader "{ a = 43 ; glop=1, 2 ); } ") 0)
+   *)
+
+  let record (p,s) =
+    (fun v (o : string->unit) ->
+      o "{" ;
+      p v o ;
+      o "}"),
+    (fun i o ->
+      let h = Hashtbl.create 11 in
+      let valid = ref true in
+      let f i o l =
+        let v = i o l in
+        match String.index v '=' with
+        | exception Not_found ->
+          valid := false
+        | idx ->
+          if idx = 0 || idx >= l-1 then (
+            valid := false
+          ) else (
+            let name = chop_sub v 0 idx
+            and value = chop_sub v (idx+1) l in
+            Hashtbl.replace h name value
+          ) in
+      let o = skip_blanks i o in
+      match i o 1 with
+      | "{" ->
+        let o = skip_blanks i (o+1) in
+        (match skip_group ~f "}" i o with
+        | None -> None
+        | Some o ->
+          if !valid then (
+            match s h with
+            | None -> None
+            | Some x -> Some (x, o)
+          ) else None)
+      | _ -> None)
+
+  let field ?default name (p, s) =
+    (fun v o ->
+      o (name ^"=") ;
+      p v o),
+    (fun h ->
+      match Hashtbl.find h name with
+      | exception Not_found -> default
+      | str ->
+        (match s (string_reader str) 0 with
+        | None ->
+          Printf.printf "Cannot parse field '%s': '%s'\n" name str ;
+          None
+        | Some (x, _) -> Some x))
+
+  (* Compose 2 fields *)
+  let (<->) (p1,s1) (p2,s2) =
+    (fun (v1, v2) o ->
+      p1 v1 o ;
+			o ";" ;
+      p2 v2 o),
+    (fun h ->
+      match s1 h with
+      | None -> None
+      | Some v1 ->
+        (match s2 h with
+        | None -> None
+        | Some v2 -> Some (v1, v2)))
 
   (*$inject
     type person = { name: string ; age: int ; male : bool }
     let person =
-      Record.((first "name" string) ++ (field "age" int) ++ (last "male" bool)) >>:
+      record ((field "name" string) <-> (field "age" int) <->
+              (field "male" ~default:true bool)) >>:
         ((fun { name ; age ; male } -> ((name, age), male)),
          (fun ((name, age), male) -> { name ; age ; male }))
    *)
-  (*$= person & ~printer:(fun x -> x)
+  (*$= person & ~printer:id
     "{name=\"John\";age=41;male=true}" (to_string person { name = "John"; age = 41; male = true })
    *)
   (*$= person & ~printer:(function None -> "" | Some (p, o) -> Printf.sprintf "(%s, %d)" (to_string person p) o)
-    (Some ({ name = "John"; age = 41; male = true }, 30)) (of_string person "{name=\"John\";age=41;male=true}" 0)
+    (Some ({ name = "John"; age = 41; male = true }, 30)) \
+      (of_string person "{name=\"John\";age=41;male=true}" 0)
+    (Some ({ name = "John"; age = 41; male = true }, 30)) \
+      (of_string person "{age=41;name=\"John\";male=true}" 0)
+    (Some ({ name = "John"; age = 41; male = true }, 39)) \
+      (of_string person " {  age=41 ; name = \"John\" ;male =true}" 0)
+    (Some ({name="John";age=41;male=true}, 28)) \
+      (of_string person " { age = 41 ; name = \"John\"}" 0)
    *)
 
   (*$inject
