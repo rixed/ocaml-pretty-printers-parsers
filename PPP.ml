@@ -1,10 +1,13 @@
+let may f = function None -> () | Some x -> f x
+let map f = function None -> None | Some x -> Some (f x)
+
 let to_string (p,_) v =
   let buf = Buffer.create 100 in
   let o str = Buffer.add_string buf str in
-  p v o ;
+  p o v ;
   Buffer.contents buf
 
-let to_out_channel chan (p,_) v = p v (output_string chan)
+let to_out_channel chan (p,_) v = p (output_string chan) v
 let to_stdout pp v = to_out_channel stdout pp v
 let to_stderr pp v = to_out_channel stderr pp v
 
@@ -48,6 +51,19 @@ let rec chop_sub s b e =
   "" (chop_sub " " 1 1 )
 *)
 
+let rec skip_blanks i o =
+  match i o 1 with
+  | " " -> skip_blanks i (o + 1)
+  | _ -> o
+
+let rec skip_word i o =
+  let s = i o 1 in
+  if s = "" then None else (
+    let c = s.[0] in
+    if is_blank c || c = ',' || c = ';' || c = '(' || c = '{' || c = '[' then
+      Some o
+    else skip_word i (o+1))
+
 let next_word_eq w i o =
   match next_eq w i o with
   | true, o ->
@@ -72,11 +88,11 @@ let string_of lst len =
  *)
 
 let seq opn cls sep iteri of_rev_list (p, s) =
-  (fun v o ->
+  (fun o v ->
     o opn ;
     iteri (fun i v' ->
       if i > 0 then o sep ;
-      p v' o) v ;
+      p o v') v ;
     o cls),
   (fun i o ->
     let rec parse_sep prev o =
@@ -99,58 +115,66 @@ let seq opn cls sep iteri of_rev_list (p, s) =
 
 
 let (++) (p1, s1) (p2, s2) =
-  (fun (v1, v2) o ->
-    p1 v1 o ;
-    p2 v2 o),
+  (fun o (v1, v2) ->
+    p1 o v1 ;
+    p2 o v2),
   (fun i o ->
     match s1 i o with
     | None -> None
     | Some (v1, o) ->
-      (match s2 i o with
-      | None -> None
-      | Some (v2, o) -> Some ((v1, v2), o)))
+      s2 i o |> map (fun (v2, o) -> (v1, v2), o))
 
 let (-+) (p1, s1) (p2, s2) =
-  (fun v2 o ->
-    p1 () o ;
-    p2 v2 o),
+  (fun o v2 ->
+    p1 o () ;
+    p2 o v2),
   (fun i o ->
     match s1 i o with
     | None -> None
     | Some ((), o) -> s2 i o)
 
 let (+-) (p1, s1) (p2, s2) =
-  (fun v1 o ->
-    p1 v1 o ;
-    p2 () o),
+  (fun o v1 ->
+    p1 o v1 ;
+    p2 o ()),
   (fun i o ->
     match s1 i o with
     | None -> None
     | Some (v, o) ->
-      (match s2 i o with
-      | None -> None
-      | Some (_, o) -> Some (v, o)))
+      s2 i o |> map (fun (_, o) -> v, o))
 
+(* Always allow blanks around the constant *)
 let cst s =
-  (fun () (o: string->unit) -> o s),
+  (fun (o: string->unit) () -> o s),
   (fun i o ->
+    let o = skip_blanks i o in
     let l = String.length s in
-    if i o l = s then Some ((), o+l) else None)
+    if i o l = s then (
+      let o = skip_blanks i (o + l) in
+      Some ((), o)
+    ) else None)
 
 let (>>:) (p, s) (f,f') =
-  (fun v o -> p (f v) o),
+  (fun o v -> p o (f v)),
   (fun i o ->
-    match s i o with
-    | None -> None
-    | Some (x, o) -> Some (f' x, o))
+    s i o |> map (fun (x,o) -> f' x, o))
 
 
 module OCaml=
 struct
   (*$< OCaml *)
-  (* [v] is the value, [o] is the output, [i] is the input *)
+
+  let unit =
+    (fun o () -> o "()"),
+    (fun i o ->
+      let o = skip_blanks i o in
+      if i o 2 = "()" then Some ((), o+2) else None)
+  (*$= unit
+    (Some ((), 2)) (of_string unit "()" 0)
+   *)
+
   let bool =
-    (fun v o -> o (if v then "true" else "false")),
+    (fun o v -> o (if v then "true" else "false")),
     (fun i o ->
       match next_word_eq "true" i o with
       | false, _ ->
@@ -170,7 +194,7 @@ struct
   (* General format: [sign] digits *)
   type int_part = IntStart | Int
   let int =
-    (fun v o -> o (string_of_int v)),
+    (fun o v -> o (string_of_int v)),
     (fun i o ->
       let rec loop o oo s n part =
         match part, i o 1 with
@@ -200,7 +224,7 @@ struct
   (* General format: [sign] digits ["." [FFF]] [e [sign] EEE] *)
   type float_part = IntStart | Int | Frac | ExpStart | Exp
   let float =
-    (fun v o -> o (string_of_float v)),
+    (fun o v -> o (string_of_float v)),
     (fun i o ->
       let rec loop o oo s n sc es exp part =
         match part, i o 1 with
@@ -242,11 +266,11 @@ struct
   (Some (1., 1)) (of_string float "1e" 0)
   (Some (-0.00010348413604, 17)) (of_string float "-0.00010348413604" 0)
  *)
- 
+
   (* Format: "..." *)
   type string_part = First | Char | BackslashStart | Backslash
   let string =
-    (fun v o -> o (Printf.sprintf "%S" v)),
+    (fun o v -> o (Printf.sprintf "%S" v)),
     (fun i o ->
       let rec loop o l s bsn part =
         match part, i o 1 with
@@ -339,6 +363,7 @@ struct
   (*$= pair & ~printer:(function None -> "" | Some ((v1,v2), i) -> Printf.sprintf "((%d,%S), %d)" v1 v2 i)
     (Some ((1,"a"), 7)) (of_string (pair int string) "(1,\"a\")" 0)
     (Some ((0,""), 6)) (of_string (pair int string) "(0,\"\")" 0)
+    (Some ((0,""), 7)) (of_string (pair int string) "(0, \"\")" 0)
    *)
 
   let triple = Tuple.tuple3
@@ -350,11 +375,6 @@ struct
     (Some ((1,"a",1), 9)) (of_string (triple int string int) "(1,\"a\",1)" 0)
     (Some ((0,"",0), 8)) (of_string (triple int string int) "(0,\"\",0)" 0)
    *)
-
-  let rec skip_blanks i o =
-    match i o 1 with
-    | " " -> skip_blanks i (o + 1)
-    | _ -> o
 
   (* Skip until end of string. Used by skip_any. *)
   let rec skip_string ?(backslashed=false) i o =
@@ -416,9 +436,9 @@ struct
    *)
 
   let record (p,s) =
-    (fun v (o : string->unit) ->
+    (fun (o : string->unit) v ->
       o "{" ;
-      p v o ;
+      p o v ;
       o "}"),
     (fun i o ->
       let h = Hashtbl.create 11 in
@@ -444,42 +464,35 @@ struct
         | None -> None
         | Some o ->
           if !valid then (
-            match s h with
-            | None -> None
-            | Some x -> Some (x, o)
+            s h |> map (fun x -> x, o)
           ) else None)
       | _ -> None)
 
   let field ?default name (p, s) =
-    (fun v o ->
+    (fun o v ->
       o (name ^"=") ;
-      p v o),
+      p o v),
     (fun h ->
       match Hashtbl.find h name with
       | exception Not_found -> default
       | str ->
-        (match s (string_reader str) 0 with
-        | None ->
-          Printf.printf "Cannot parse field '%s': '%s'\n" name str ;
-          None
-        | Some (x, _) -> Some x))
+        s (string_reader str) 0 |> map fst)
 
   (* Compose 2 fields *)
   let (<->) (p1,s1) (p2,s2) =
-    (fun (v1, v2) o ->
-      p1 v1 o ;
+    (fun o (v1, v2) ->
+      p1 o v1 ;
 			o ";" ;
-      p2 v2 o),
+      p2 o v2),
     (fun h ->
       match s1 h with
       | None -> None
       | Some v1 ->
-        (match s2 h with
-        | None -> None
-        | Some v2 -> Some (v1, v2)))
+        s2 h |> map (fun v2 -> v1, v2))
 
   (*$inject
     type person = { name: string ; age: int ; male : bool }
+
     let person =
       record ((field "name" string) <-> (field "age" int) <->
               (field "male" ~default:true bool)) >>:
@@ -498,6 +511,77 @@ struct
       (of_string person " {  age=41 ; name = \"John\" ;male =true}" 0)
     (Some ({name="John";age=41;male=true}, 28)) \
       (of_string person " { age = 41 ; name = \"John\"}" 0)
+   *)
+
+  let union (p, s) =
+    p,
+    (fun i o ->
+      let o = skip_blanks i o in
+      match skip_word i o with
+      | None -> None
+      | Some o' ->
+        let name = chop_sub (i o (o' - o)) 0 (o'-o) in
+        (match skip_any i o' with
+        | None -> None
+        | Some o ->
+          let value = chop_sub (i o' (o-o')) 0 (o-o') in
+          s name value |> map (fun x -> x, o)))
+
+  let (|||) (p1,s1) (p2,s2) =
+    (fun (o : string -> unit) (v1,v2) ->
+      may (p1 o) v1 ;
+      may (p2 o) v2),
+    (fun name value ->
+      match s1 name value with
+      | Some _ as x -> Some (x, None)
+      | None ->
+        (match s2 name value with
+        | Some _ as x -> Some (None, x)
+        | None -> None))
+
+  (* turn a pretty-printer-parser into the version above usable by union: *)
+  let variant name (p,s) =
+    (fun o v -> o name ; p o v),
+    (fun n v ->
+      if n = name then (
+        let i = string_reader v in
+        s i 0 |> map fst
+      ) else None)
+
+  (* Like unit but with no representation, useful for
+   * constructor without arguments *)
+  let none =
+    (fun _o () -> ()),
+    (fun _i o -> Some ((), o))
+  (*$= none
+    (Some ((), 0)) (of_string none "" 0)
+   *)
+
+  (*$inject
+    type color = RGB of (int * int * int)
+               | Named of string
+               | Transparent
+
+    let color = union (
+      (variant "RGB" (triple int int int)) ||| (variant "Named" string) ||| (variant "Transp" none)) >>:
+      ((function RGB rgb -> Some (Some rgb, None), None
+               | Named name -> Some (None, Some name), None
+               | Transparent -> None, Some ()),
+       (function Some (Some rgb, _), _ -> RGB rgb
+               | Some (_, Some name), _ -> Named name
+               | _, Some () -> Transparent
+               | _ -> assert false))
+   *)
+  (*$= color & ~printer:id
+    "RGB(0,0,255)" (to_string color (RGB (0, 0, 255)))
+    "Transp" (to_string color Transparent)
+   *)
+  (*$= color & ~printer:(function None -> "" | Some (p, o) -> Printf.sprintf "(%s, %d)" (to_string color p) o)
+    (Some (RGB(0,0,255), 12)) (of_string color "RGB(0,0,255)" 0)
+    (Some (RGB(0,0,255), 13)) (of_string color "RGB (0,0,255)" 0)
+    (Some (RGB(0,0,255), 15)) (of_string color "  RGB (0,0,255)" 0)
+    (Some (RGB(0,0,255), 21)) (of_string color "RGB  ( 0 ,  0, 255  ) " 0)
+    (Some (Transparent, 8)) (of_string color " Transp " 0)
    *)
 
   (*$inject
@@ -525,7 +609,7 @@ end
 (* Useful for conditional printing: *)
 
 let delayed (p, s) =
-  (fun v o -> p (v ()) o),
+  (fun o v -> p o (v ())),
   (fun i o -> s (i ()) o)
 (*$= delayed
   "42" (to_string (delayed OCaml.int) (fun () -> 42))
