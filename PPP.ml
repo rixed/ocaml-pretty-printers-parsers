@@ -1,3 +1,8 @@
+type writer = string -> unit
+type reader = int -> int -> string
+type 'a t = (writer -> 'a -> unit) *
+            (reader -> int -> ('a * int) option)
+
 let may f = function None -> () | Some x -> f x
 let map f = function None -> None | Some x -> Some (f x)
 
@@ -164,7 +169,7 @@ module OCaml=
 struct
   (*$< OCaml *)
 
-  let unit =
+  let unit : unit t =
     (fun o () -> o "()"),
     (fun i o ->
       let o = skip_blanks i o in
@@ -173,7 +178,7 @@ struct
     (Some ((), 2)) (of_string unit "()" 0)
    *)
 
-  let bool =
+  let bool : bool t =
     (fun o v -> o (if v then "true" else "false")),
     (fun i o ->
       match next_word_eq "true" i o with
@@ -193,7 +198,7 @@ struct
 
   (* General format: [sign] digits *)
   type int_part = IntStart | Int
-  let int =
+  let int : int t =
     (fun o v -> o (string_of_int v)),
     (fun i o ->
       let rec loop o oo s n part =
@@ -223,7 +228,7 @@ struct
 
   (* General format: [sign] digits ["." [FFF]] [e [sign] EEE] *)
   type float_part = IntStart | Int | Frac | ExpStart | Exp
-  let float =
+  let float : float t =
     (fun o v -> o (string_of_float v)),
     (fun i o ->
       let rec loop o oo s n sc es exp part =
@@ -269,7 +274,7 @@ struct
 
   (* Format: "..." *)
   type string_part = First | Char | BackslashStart | Backslash
-  let string =
+  let string : string t =
     (fun o v -> o (Printf.sprintf "%S" v)),
     (fun i o ->
       let rec loop o l s bsn part =
@@ -312,7 +317,8 @@ struct
     (Some ("\207", 6)) (of_string string "\"\\207\"" 0)
    *)
 
-  let list p = seq "[" "]" ";" List.iteri List.rev p
+  let list (p : 'a t) : 'a list t =
+    seq "[" "]" ";" List.iteri List.rev p
   (*$= list & ~printer:id
      "[]" (to_string (list int) [])
      "[1;2;3]" (to_string (list int) [1;2;3])
@@ -322,7 +328,8 @@ struct
     (Some ([1;2;3], 7)) (of_string (list int) "[1;2;3]" 0)
    *)
 
-  let array p = seq "[|" "|]" ";" Array.iteri (fun l -> Array.of_list (List.rev l)) p
+  let array (p : 'a t) : 'a array t =
+    seq "[|" "|]" ";" Array.iteri (fun l -> Array.of_list (List.rev l)) p
   (*$= array & ~printer:id
      "[||]" (to_string (array string) [||])
      "[|\"[\";\"|\";\";\"|]" (to_string (array string) [| "["; "|"; ";" |])
@@ -337,17 +344,20 @@ struct
     let last p = p +- cst ")"
     let sep = cst ","
 
-    let tuple2 p1 p2 =
+    let tuple2 (p1 : 'a t) (p2 : 'b t) : ('a * 'b) t =
       first p1 +- sep ++ last p2
-    let tuple3 p1 p2 p3 =
+
+    let tuple3 (p1 : 'a t) (p2 : 'b t) (p3 : 'c t) : ('a * 'b * 'c) t =
       first p1 +- sep ++ p2 +- sep ++ last p3 >>:
         ((fun (v1,v2,v3) -> (v1,v2),v3),
          (fun ((v1,v2),v3) -> v1,v2,v3))
-    let tuple4 p1 p2 p3 p4 =
+
+    let tuple4 (p1 : 'a t) (p2 : 'b t) (p3 : 'c t) (p4 : 'd t) : ('a * 'b * 'c * 'd) t =
       first p1 +- sep ++ p2 +- sep ++ p3 +- sep ++ last p4 >>:
         ((fun (v1,v2,v3,v4) -> ((v1,v2),v3),v4),
          (fun (((v1,v2),v3),v4) -> v1,v2,v3,v4))
-    let tuple5 p1 p2 p3 p4 p5 =
+
+    let tuple5 (p1 : 'a t) (p2 : 'b t) (p3 :'c t) (p4 : 'd t) (p5 :'e t) : ('a * 'b * 'c * 'd * 'e) t =
       first p1 +- sep ++ p2 +- sep ++ p3 +- sep ++ p4 +- sep ++ last p5 >>:
         ((fun (v1,v2,v3,v4,v5) -> (((v1,v2),v3),v4),v5),
          (fun ((((v1,v2),v3),v4),v5) -> v1,v2,v3,v4,v5))
@@ -493,7 +503,7 @@ struct
   (*$inject
     type person = { name: string ; age: int ; male : bool }
 
-    let person =
+    let person : person t =
       record ((field "name" string) <-> (field "age" int) <->
               (field "male" ~default:true bool)) >>:
         ((fun { name ; age ; male } -> ((name, age), male)),
@@ -550,7 +560,7 @@ struct
 
   (* Like unit but with no representation, useful for
    * constructor without arguments *)
-  let none =
+  let none : unit t =
     (fun _o () -> ()),
     (fun _i o -> Some ((), o))
   (*$= none
@@ -562,7 +572,7 @@ struct
                | Named of string
                | Transparent
 
-    let color = union (
+    let color : color t = union (
       (variant "RGB" (triple int int int)) ||| (variant "Named" string) ||| (variant "Transp" none)) >>:
       ((function RGB rgb -> Some (Some rgb, None), None
                | Named name -> Some (None, Some name), None
@@ -608,9 +618,9 @@ end
 
 (* Useful for conditional printing: *)
 
-let delayed (p, s) =
+let delayed ((p, s) : 'a t) : (unit -> 'a) t =
   (fun o v -> p o (v ())),
-  (fun i o -> s (i ()) o)
+  (fun i o -> s i o |> map (fun (x, o) -> (fun () -> x), o))
 (*$= delayed
   "42" (to_string (delayed OCaml.int) (fun () -> 42))
  *)
