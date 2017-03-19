@@ -63,11 +63,16 @@ let rec skip_blanks i o =
 
 let rec skip_word i o =
   let s = i o 1 in
-  if s = "" then None else (
+  if s = "" then o else (
     let c = s.[0] in
     if is_blank c || c = ',' || c = ';' || c = '(' || c = '{' || c = '[' then
-      Some o
+      o
     else skip_word i (o+1))
+
+let next_word i o =
+  let o' = skip_word i o in
+  if o' = o then None else
+  Some (i o (o'-o), o')
 
 let next_word_eq w i o =
   match next_eq w i o with
@@ -77,6 +82,13 @@ let next_word_eq w i o =
      let c = sep.[0] in
      not (is_letter c || is_digit c || c = '_')), o
   | x -> x
+
+let rec until u i o =
+  let l = String.length u in
+  let s = i o l in
+  if String.length s < l then None else
+  if s <> u then until u i (o + 1) else
+  Some (o + l)
 
 let string_of lst len =
   let s = Bytes.create len in
@@ -117,7 +129,6 @@ let seq opn cls sep iteri of_rev_list (p, s) =
       else
         parse_item [] (o + String.length opn)
     ) else None)
-
 
 let (++) (p1, s1) (p2, s2) =
   (fun o (v1, v2) ->
@@ -527,10 +538,9 @@ struct
     p,
     (fun i o ->
       let o = skip_blanks i o in
-      match skip_word i o with
+      match next_word i o with
       | None -> None
-      | Some o' ->
-        let name = chop_sub (i o (o' - o)) 0 (o'-o) in
+      | Some (name, o') ->
         (match skip_any i o' with
         | None -> None
         | Some o ->
@@ -579,8 +589,7 @@ struct
                | Transparent -> None, Some ()),
        (function Some (Some rgb, _), _ -> RGB rgb
                | Some (_, Some name), _ -> Named name
-               | _, Some () -> Transparent
-               | _ -> assert false))
+               | _ -> Transparent))
    *)
   (*$= color & ~printer:id
     "RGB(0,0,255)" (to_string color (RGB (0, 0, 255)))
