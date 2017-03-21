@@ -195,6 +195,17 @@ let default v (p, s) =
   (Some (17,0)) (of_string (default 17 (cst "{" -+ OCaml.int +- cst "}")) "pas glop" 0)
  *)
 
+let optional (p, s) =
+  (fun o -> function None -> () | Some x -> p o x),
+  (fun i o ->
+    match s i o with
+    | Some (x, o') -> Some (Some x, o')
+    | None -> Some (None, o))
+(*$= optional & ~printer:(function None -> "" | Some (None, _) -> Printf.sprintf "none" | Some (Some d, o) -> Printf.sprintf "(%d, %d)" d o)
+  (Some (Some 42,4)) (of_string (optional (cst "{" -+ OCaml.int +- cst "}")) "{42}" 0)
+  (Some (None,0)) (of_string (optional (cst "{" -+ OCaml.int +- cst "}")) "pas glop" 0)
+ *)
+
 let (>>:) (p, s) (f,f') =
   (fun o v -> p o (f v)),
   (fun i o ->
