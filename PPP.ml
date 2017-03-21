@@ -74,6 +74,27 @@ let next_word i o =
   if o' = o then None else
   Some (i o (o'-o), o')
 
+(* Start with a letter of underscore, then can contain digits. *)
+let identifier =
+  (fun o x -> o x),
+  (fun i o ->
+    let rec loop oo =
+      let s = i oo 1 in
+      if s = "" then oo else
+      let c = s.[0] in
+      if is_letter c || c = '_' || oo > o && is_digit c then
+        loop (oo+1)
+      else
+        oo in
+    let oo = loop o in
+    if oo > o then Some (i o oo, oo) else None)
+(*$= identifier & ~printer:(function None -> "" | Some (i, o) -> Printf.sprintf "(%s,%d)" i o)
+  (Some ("glop", 4)) (of_string identifier "glop" 0)
+  (Some ("glop", 4)) (of_string identifier "glop\n" 0)
+  (Some ("glop0", 5)) (of_string identifier "glop0" 0)
+  None (of_string identifier "0glop" 0)
+ *)
+
 let next_word_eq w i o =
   match next_eq w i o with
   | true, o ->
