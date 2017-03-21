@@ -83,6 +83,20 @@ let next_word_eq w i o =
      not (is_letter c || is_digit c || c = '_')), o
   | x -> x
 
+let next_int i o =
+  let rec loop n o =
+    let s = i o 1 in
+    if str_is_digit s then (
+      loop (n*10 + digit_of s) (o+1)
+    ) else (
+      n, o
+    ) in
+  let n, o' = loop 0 o in
+  if o' > o then Some (n, o') else None
+(*$= next_int & ~printer:(function None -> "" | Some (n, o) -> Printf.sprintf "(%d, %d)" n o)
+  (Some (42, 2)) (next_int (string_reader "42glop") 0)
+ *)
+
 let rec until u i o =
   let l = String.length u in
   let s = i o l in
