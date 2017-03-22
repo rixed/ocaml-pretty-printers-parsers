@@ -148,22 +148,28 @@ let seq opn cls sep iteri of_rev_list (p, s) =
     o cls),
   (fun i o ->
     let rec parse_sep prev o =
-      if i o (String.length cls) = cls then
-        Some (of_rev_list prev, o + String.length cls)
-      else if i o (String.length sep) = sep then
+      if i o (String.length sep) = sep then
         parse_item prev (o + String.length sep)
+      else if i o (String.length cls) = cls then
+        Some (of_rev_list prev, o + String.length cls)
       else
         None
     and parse_item prev o =
       match s i o with
-      | None -> None
-      | Some (x, o') -> parse_sep (x::prev) o' in
-    if i o (String.length opn) = opn then (
-      if i (o + String.length opn) (String.length cls) = cls then
-        Some (of_rev_list [], o + String.length opn + String.length cls)
-      else
-        parse_item [] (o + String.length opn)
-    ) else None)
+      | Some (x, o') -> parse_sep (x::prev) o'
+      | None ->
+        if i o (String.length cls) = cls then
+          Some (of_rev_list prev, o + String.length cls)
+        else None in
+    if i o (String.length opn) = opn then
+      parse_item [] (o + String.length opn)
+    else None)
+(*$= seq & ~printer:(function None -> "" | Some (l,o) -> Printf.sprintf "(%s, %d)" (String.concat ";" l) o)
+  (Some (["a";"b";"cde"], 9)) \
+    (of_string (seq "[" "]" ";" List.iteri List.rev identifier) "[a;b;cde]" 0)
+  (Some (["a";"b";"cde"], 9)) \
+    (of_string (seq "" "" "--" List.iteri List.rev identifier) "a--b--cde" 0)
+ *)
 
 let (++) (p1, s1) (p2, s2) =
   (fun o (v1, v2) ->
