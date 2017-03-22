@@ -87,7 +87,7 @@ let identifier =
       else
         oo in
     let oo = loop o in
-    if oo > o then Some (i o oo, oo) else None)
+    if oo > o then Some (i o (oo-o), oo) else None)
 (*$= identifier & ~printer:(function None -> "" | Some (i, o) -> Printf.sprintf "(%s,%d)" i o)
   (Some ("glop", 4)) (of_string identifier "glop" 0)
   (Some ("glop", 4)) (of_string identifier "glop\n" 0)
