@@ -123,7 +123,7 @@ let rec until u i o =
   let s = i o l in
   if String.length s < l then None else
   if s <> u then until u i (o + 1) else
-  Some (o + l)
+  Some o
 
 let string_of lst len =
   let s = Bytes.create len in
