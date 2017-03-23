@@ -604,6 +604,7 @@ struct
       match next_word i o with
       | None -> None
       | Some (name, o') ->
+        let o' = skip_blanks i o' in
         (match skip_any i o' with
         | None -> None
         | Some o ->
@@ -624,7 +625,7 @@ struct
 
   (* turn a pretty-printer-parser into the version above usable by union: *)
   let variant name (p,s) =
-    (fun o v -> o name ; p o v),
+    (fun o v -> o name ; o " " ; p o v),
     (fun n v ->
       if n = name then (
         let i = string_reader v in
@@ -655,14 +656,14 @@ struct
                | _ -> Transparent))
    *)
   (*$= color & ~printer:id
-    "RGB(0,0,255)" (to_string color (RGB (0, 0, 255)))
-    "Transp" (to_string color Transparent)
+    "RGB (0,0,255)" (to_string color (RGB (0, 0, 255)))
+    "Transp " (to_string color Transparent)
    *)
   (*$= color & ~printer:(function None -> "" | Some (p, o) -> Printf.sprintf "(%s, %d)" (to_string color p) o)
-    (Some (RGB(0,0,255), 12)) (of_string color "RGB(0,0,255)" 0)
-    (Some (RGB(0,0,255), 13)) (of_string color "RGB (0,0,255)" 0)
-    (Some (RGB(0,0,255), 15)) (of_string color "  RGB (0,0,255)" 0)
-    (Some (RGB(0,0,255), 21)) (of_string color "RGB  ( 0 ,  0, 255  ) " 0)
+    (Some (RGB (0,0,255), 12)) (of_string color "RGB(0,0,255)" 0)
+    (Some (RGB (0,0,255), 13)) (of_string color "RGB (0,0,255)" 0)
+    (Some (RGB (0,0,255), 15)) (of_string color "  RGB (0,0,255)" 0)
+    (Some (RGB (0,0,255), 21)) (of_string color "RGB  ( 0 ,  0, 255  ) " 0)
     (Some (Transparent, 8)) (of_string color " Transp " 0)
    *)
 
