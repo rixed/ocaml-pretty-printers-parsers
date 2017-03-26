@@ -667,6 +667,19 @@ struct
     (Some (Transparent, 8)) (of_string color " Transp " 0)
    *)
 
+  let result ok_ppp err_ppp = union (
+    variant "Ok" ok_ppp |||
+    variant "Err" err_ppp) >>:
+    ((function Ok x -> Some x, None
+             | Error e -> None, Some e),
+     (function Some x, _-> Ok x
+             | _, Some e -> Error e
+             | _ -> assert false))
+  (*$= result & ~printer:(function None -> "" | Some (Ok x, o) -> Printf.sprintf "Ok(%d,%d)" x o | Some (Error e, o) -> Printf.sprintf "Err(%s,%d)" e o)
+    (Some (Error "test", 10)) (of_string (result int string) "Err \"test\"" 0)
+    (Some (Ok 42, 5)) (of_string (result int string) "Ok 42" 0)
+   *)
+
   (*$inject
     let test_id p x =
       let s = to_string p x in
