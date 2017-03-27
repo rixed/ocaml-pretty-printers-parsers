@@ -1,7 +1,9 @@
 type writer = string -> unit
 type reader = int -> int -> string
-type 'a t = { printer : writer -> 'a -> unit ;
-              scanner : reader -> int -> ('a * int) option ;
+type 'a printer = writer -> 'a -> unit
+type 'a scanner = reader -> int -> ('a * int) option
+type 'a t = { printer : 'a printer ;
+              scanner : 'a scanner ;
               descr : string }
 
 let may f = function None -> () | Some x -> f x
@@ -61,20 +63,67 @@ let rec skip_blanks i o =
   | " " -> skip_blanks i (o + 1)
   | _ -> o
 
-let rec skip_word i o =
-  let s = i o 1 in
-  if s = "" then o else (
-    let c = s.[0] in
-    if is_blank c || c = ',' || c = ';' || c = '(' || c = '{' || c = '[' then
-      o
-    else skip_word i (o+1))
+let string_of lst len =
+  let s = Bytes.create len in
+  let rec loop i lst =
+    if i >= 0 then (
+      Bytes.set s i (List.hd lst) ;
+      loop (i-1) (List.tl lst)
+    ) in
+  loop (len-1) lst ;
+  Bytes.to_string s
+(*$= string_of & ~printer:id
+  "glop" (string_of ['p';'o';'l';'g'] 4)
+  "" (string_of [] 0)
+ *)
 
-let next_word i o =
-  let o' = skip_word i o in
-  if o' = o then None else
-  Some (i o (o'-o), o')
+(* C-like strings. Format: "..." *)
+type string_part = First | Char | BackslashStart | Backslash
+let string : string t =
+  { printer = (fun o v -> o (Printf.sprintf "%S" v)) ;
+    scanner = (fun i o ->
+      let rec loop o l s bsn part =
+        match part, i o 1 with
+        | First, "\"" -> loop (o+1) l s bsn Char
+        | Char, "\\" -> loop (o+1) l s bsn BackslashStart
+        | Char, "\"" -> (* The only successful termination *)
+          Some (string_of l s, o+1)
+        | Char, d when String.length d > 0 ->
+          loop (o+1) (d.[0]::l) (s+1) bsn Char
+        | BackslashStart, "\\" -> loop (o+1) ('\\'::l) (s+1) bsn Char
+        | BackslashStart, "\"" -> loop (o+1) ('"'::l) (s+1) bsn Char
+        | BackslashStart, "\'" -> loop (o+1) ('\''::l) (s+1) bsn Char
+        | BackslashStart, "n" -> loop (o+1) ('\n'::l) (s+1) bsn Char
+        | BackslashStart, "r" -> loop (o+1) ('\r'::l) (s+1) bsn Char
+        | BackslashStart, "t" -> loop (o+1) ('\t'::l) (s+1) bsn Char
+        | BackslashStart, "b" -> loop (o+1) ('\b'::l) (s+1) bsn Char
+        | BackslashStart, d when str_is_digit d ->
+          (* 10+ so that we know when we have had 3 digits: *)
+          loop (o+1) l s (10 + digit_of d) Backslash
+        | Backslash, d when str_is_digit d ->
+          if bsn >= 100 then ( (* we already had 2 digits *)
+            let bsn = (bsn - 100) * 10 + digit_of d in
+            if bsn > 255 then None
+            else loop (o+1) (Char.chr bsn :: l) (s+1) 0 Char
+          ) else (
+            (* 10+ so that we know when we have had 3 digits: *)
+            loop (o+1) l s (10*bsn + digit_of d) Backslash
+          )
+        | _ -> None (* everything else is game-over *) in
+      loop o [] 0 0 First) ;
+    descr = "string" }
+(*$= string & ~printer:id
+   "\"glop\"" (to_string string "glop")
+   "\"\"" (to_string string "")
+   "\"\\207\"" (to_string string "\207")
+ *)
+(*$= string & ~printer:(function None -> "" | Some (s, i) -> Printf.sprintf "(%s, %d)" s i)
+  (Some ("glop", 6)) (of_string string "\"glop\"" 0)
+  (Some ("gl\bop\n", 10)) (of_string string "\"gl\\bop\\n\"" 0)
+  (Some ("\207", 6)) (of_string string "\"\\207\"" 0)
+ *)
 
-(* Start with a letter of underscore, then can contain digits. *)
+(* C-like identifiers. Start with a letter of underscore, then can contain digits. *)
 let identifier =
   { printer = (fun o x -> o x) ;
     scanner = (fun i o ->
@@ -125,20 +174,6 @@ let rec until u i o =
   if String.length s < l then None else
   if s <> u then until u i (o + 1) else
   Some o
-
-let string_of lst len =
-  let s = Bytes.create len in
-  let rec loop i lst =
-    if i >= 0 then (
-      Bytes.set s i (List.hd lst) ;
-      loop (i-1) (List.tl lst)
-    ) in
-  loop (len-1) lst ;
-  Bytes.to_string s
-(*$= string_of & ~printer:id
-  "glop" (string_of ['p';'o';'l';'g'] 4)
-  "" (string_of [] 0)
- *)
 
 let seq name opn cls sep iteri of_rev_list ppp =
   { printer = (fun o v ->
@@ -223,6 +258,25 @@ let cst s =
       ) else None) ;
     descr = "" }
 
+let bool : bool t =
+  { printer = (fun o v -> o (if v then "true" else "false")) ;
+    scanner = (fun i o ->
+      match next_word_eq "true" i o with
+      | false, _ ->
+        (match next_word_eq "false" i o with
+        | true, o -> Some (false, o)
+        | _ -> None)
+      | x -> Some x) ;
+    descr = "boolean" }
+(*$= bool & ~printer:id
+  "true" (to_string bool true)
+  "false" (to_string bool false)
+ *)
+(*$= bool
+  (Some (true, 4)) (of_string bool "true" 0)
+  (Some (false, 5)) (of_string bool "false" 0)
+*)
+
 (* Int syntax is generic enough: *)
 (* General format: [sign] digits *)
 type int_part = IntStart | Int
@@ -255,6 +309,64 @@ let int : int t =
   None (of_string int "+glop" 0)
  *)
 
+(* General format: [sign] digits ["." [FFF]] [e [sign] EEE] *)
+type float_part = IntStart | Int | Frac | ExpStart | Exp
+let float : float t =
+  { printer = (fun o v -> o (string_of_float v)) ;
+    scanner = (fun i o ->
+      let rec loop o oo s n sc es exp part =
+        match part, i o 1 with
+        | IntStart, "+" -> loop (o+1) oo s n sc es exp Int
+        | IntStart, "-" -> loop (o+1) oo (~- s) n sc es exp Int
+        | (IntStart|Int), d when str_is_digit d ->
+          loop (o+1) (o+1) s (n * 10 + digit_of d) sc es exp Int
+        | Int, "." -> loop (o+1) (o+1) s n sc es exp Frac
+        | (Int|Frac), ("e"|"E") -> loop (o+1) oo s n sc es exp ExpStart
+        | Frac, d when str_is_digit d ->
+          loop (o+1) (o+1) s (n * 10 + digit_of d) (sc+1) es exp Frac
+        | ExpStart, "+" -> loop (o+1) oo s n sc es exp Exp
+        | ExpStart, "-" -> loop (o+1) oo s n sc (~- es) exp Exp
+        | (ExpStart|Exp), d when str_is_digit d ->
+          loop (o+1) (o+1) s n sc es (exp * 10 + digit_of d) Exp
+        | _ -> oo, s, n, sc, es, exp in
+      let oo, s, n, sc, es, exp = loop o o 1 0 0 1 0 IntStart in
+      if oo > o then Some (
+        float_of_int (s * n) *. 10. ** float_of_int (es * exp - sc), oo)
+      else None) ;
+    descr = "float" }
+(*$= float & ~printer:id
+  "-0.00010348413604" (to_string float (-0.00010348413604))
+ *)
+(*$= float & ~printer:(function None -> "" | Some (f,i) -> Printf.sprintf "(%f, %d)" f i)
+  (Some (3.14, 4)) (of_string float "3.14" 0)
+  (Some (3.14, 6)) (of_string float "314e-2" 0)
+  (Some (3.14, 8)) (of_string float "0.0314E2" 0)
+  (Some (~-.3.14, 9)) (of_string float "-0.0314E2" 0)
+  (Some (42., 2)) (of_string float "42" 0)
+  (Some (~-.42., 3)) (of_string float "-42" 0)
+  (Some (42., 3)) (of_string float "42." 0)
+  (Some (~-.42., 4)) (of_string float "-42." 0)
+  (Some (42., 5)) (of_string float "+42e0" 0)
+  (Some (42., 6)) (of_string float "+42.e0" 0)
+  (Some (42., 7)) (of_string float "+42.0e0" 0)
+  None (of_string float "glop" 0)
+  None (of_string float "+glop" 0)
+  None (of_string float "-glop" 0)
+  (Some (1., 1)) (of_string float "1e" 0)
+  (Some (-0.00010348413604, 17)) (of_string float "-0.00010348413604" 0)
+ *)
+
+let optional ppp =
+  { printer = (fun o -> function None -> () | Some x -> ppp.printer o x) ;
+    scanner = (fun i o ->
+      match ppp.scanner i o with
+      | Some (x, o') -> Some (Some x, o')
+      | None -> Some (None, o)) ;
+    descr = "optional "^ ppp.descr }
+(*$= optional & ~printer:(function None -> "" | Some (None, _) -> Printf.sprintf "none" | Some (Some d, o) -> Printf.sprintf "(%d, %d)" d o)
+  (Some (Some 42,4)) (of_string (optional (cst "{" -+ int +- cst "}")) "{42}" 0)
+  (Some (None,0)) (of_string (optional (cst "{" -+ int +- cst "}")) "pas glop" 0)
+ *)
 
 let default v ppp =
   { printer = ppp.printer ;
@@ -268,13 +380,311 @@ let default v ppp =
   (Some (17,0)) (of_string (default 17 (cst "{" -+ int +- cst "}")) "pas glop" 0)
  *)
 
-(* Useful for conditional printing: *)
+(* Generic record/union like facility *)
 
-let delayed (ppp : 'a t) : (unit -> 'a) t =
-  { printer = (fun o v -> ppp.printer o (v ())) ;
-    scanner = (fun i o -> ppp.scanner i o |> map (fun (x, o) -> (fun () -> x), o)) ;
-    descr = ppp.descr }
-(*$= delayed
-  "42" (to_string (delayed int) (fun () -> 42))
+(* Skip until end of string. Used by skip_any. *)
+let rec skip_string ?(backslashed=false) i o =
+  match i o 1 with
+  | "\"" -> if backslashed then skip_string i (o+1) else Some (o+1)
+  (* This is tab ; avoids confusing qtest: *)
+  | "\x5c" -> skip_string ~backslashed:(not backslashed) i (o + 1)
+  | "" -> None
+  | _ -> skip_string i (o+1)
+
+let rec skip_delim ?(had_delim=false) i o =
+  match i o 1 with
+  | ("," | ";") when not had_delim -> skip_delim ~had_delim:true i (o+1)
+  | s when String.length s > 0 && is_blank s.[0] -> skip_delim i (o+1)
+  | _ -> if had_delim then Some o else None
+
+let starts_with pref str =
+  let len = String.length pref in
+  try (
+    for i = 0 to len-1 do
+      if pref.[i] <> str.[i] then raise Exit
+    done ;
+    true
+  ) with Exit -> false
+
+(* Rewrite this crap with the help of a function that reads an identifier, an
+ * eq sign, then any value until either some sep or some cls. Each of eq, sep
+ * and cls have to be a string that can be empty. Then union and record are
+ * easier to write.  Maybe we could just change skip_any in such a way that the
+ * callback would return both the identifier and the value? *)
+
+let stream_starts_with i o s =
+  let l = String.length s in
+  let str = i o l in
+  str = s
+
+(* To be able to "reorder" records fields we need a function able to tell us
+ * the length of a value, without knowing its type. If we have this, then we
+ * can read a sequence of identifier * anything, and deal with it.
+ * Delims are used to know where the value ends. *)
+let rec skip_any groupings delims i o =
+  (* also handle strings *)
+  let o = skip_blanks i o in
+  let c = i o 1 in
+  if c = "" then Some o
+  else if c = "\"" then skip_string i (o+1)
+  else if List.exists (stream_starts_with i o) delims then Some o
+  else (
+    match List.find (fun (opn, _) ->
+      stream_starts_with i o opn) groupings with
+    | exception Not_found ->
+      (* Not a group: this char is part of the value that we skip *)
+      skip_any groupings delims i (o+1)
+    | opn, cls ->
+      skip_group cls groupings i (o + String.length opn)
+  )
+and skip_group cls groupings i o =
+  let clsl = String.length cls in
+  let o = skip_blanks i o in
+  if i o clsl = cls then Some (o + clsl) else
+  match skip_any groupings [cls] i o with
+  | None -> None
+  | Some o' ->
+    let o'' = skip_blanks i o' in
+    let s = i o'' clsl in
+    if s = cls then (
+      Some (o'' + clsl)
+    ) else None
+(*$= skip_any & ~printer:(function None -> "" | Some o -> string_of_int o)
+  (Some 4) (skip_any [] [","] (string_reader "glop") 0)
+  (Some 6) (skip_any ["(",")"] [] (string_reader "(glop)") 0)
+  (Some 8) (skip_any ["[|","|]"] [] (string_reader "[|glop|]") 0)
+  (Some 2) (skip_any ["(",")"] [] (string_reader "()") 0)
+  (Some 7) (skip_any ["[","]"] [";"] (string_reader "[1;2;3] ; glop") 0)
+  (Some 13) (skip_any ["[","]"] [";"] (string_reader "[ 1 ; 2 ; 3 ]") 0)
+  (Some 12) (skip_any ["(",")"] [" "] (string_reader " \"b()l\\\"a][\" z") 0)
+  (Some 26) (skip_any ["{","}"] [";"] (string_reader "{ a = 43 ; glop=(1, 2 ); } ; z ") 0)
+  None (skip_any ["{","}" ; "(",")"] [" ";";"] (string_reader "{ a = 43 ; glop=1 ) ") 0)
  *)
 
+let debug = Printf.ifprintf
+
+(* Instead of a normal ppp, the printers used by union take
+ * a optional value and prints only when it's set - with the idea
+ * that this value will be a pair of pairs of pairs obtained with |||.
+ *
+ * The scanners take a string (the name of the field) and a reader that
+ * will read the string value.
+ * Then the ||| combinator will work on an optional pair of optional pair
+ * of... and print/scan only one value (suitable for enum) while the
+ * <-> combinator will work on pairs of pairs and set one of the item
+ * based on the name. In both case the field combinator returns an
+ * optional value depending if the field name match or not. *)
+type 'a u =
+  (string t -> bool -> 'a printer) *    (* name ppp, bool is: do we need a separator? *)
+  (string -> 'a scanner) *  (* string is: field value that's going to be read *)
+  string                    (* how to build the type name *)
+let union opn cls eq groupings delims name_ppp (p, s, id : 'a u) : 'a t =
+  { printer = (fun o x ->
+      o opn ;
+      p name_ppp false o x ;
+      o cls) ;
+    scanner = (fun i o ->
+      let opn_len = String.length opn
+      and cls_len = String.length cls in
+      let o = skip_blanks i o in
+      match i o opn_len with
+      | str when str = opn ->
+        debug stderr "found union opn\n" ;
+        let o = o + opn_len in
+        (match name_ppp.scanner i o with
+        | None -> None
+        | Some (name, o') ->
+          debug stderr "found union name '%s'\n" name ;
+          (* Now skip the eq sign *)
+          let o' = skip_blanks i o' in
+          let eq_len = String.length eq in
+          (match i o' eq_len with
+          | e when e = eq ->
+            debug stderr "found eq '%s'\n" eq ;
+            let o' = skip_blanks i (o' + eq_len) in
+            (* Now the value *)
+            let delims' = if cls_len > 0 then cls::delims else delims in
+            (match skip_any groupings delims' i o' with
+            | None -> None
+            | Some o ->
+              let o = skip_blanks i o in
+              (* Check we have cls: *)
+              (match i o cls_len with
+              | str when str = cls ->
+                debug stderr "found cls '%s'\n" cls ;
+                let value = chop_sub (i o' (o-o')) 0 (o-o') in
+                let i = string_reader value in
+                (match s name i 0 with
+                | Some (v, _o') ->
+                  debug stderr "found value and parsed it.\n" ;
+                  (* TODO: check o' *)
+                  Some (v, o + cls_len)
+                | x -> x)
+              | _ -> None))
+          | _ -> None))
+      | _ -> None) ;
+    descr = id }
+
+(* Combine two ppp into a pair of options *)
+let (|||) (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option * 'b option) u =
+  (fun name_ppp need_sep o (v1,v2) ->
+    may (p1 name_ppp need_sep o) v1 ;
+    let need_sep = need_sep || v1 <> None in
+    may (p2 name_ppp need_sep o) v2),
+  (fun n i o ->
+    match s1 n i o with
+    | Some (x, o) -> Some ((Some x, None), o)
+    | None ->
+      (match s2 n i o with
+      | Some (x, o) -> Some ((None, Some x), o)
+      | None -> None)),
+  (id1 ^" | "^ id2)
+
+let variant eq sep id_sep name (ppp : 'a t) : 'a u =
+  (fun name_ppp need_sep o v ->
+    if need_sep then o sep ;
+    name_ppp.printer o name ;
+    o eq ;
+    ppp.printer o v),
+  (fun n i o ->
+    if n <> name then None
+    else ppp.scanner i o),
+  (name ^ id_sep ^ ppp.descr)
+
+(* Like unit but with no representation, useful for
+ * constructor without arguments *)
+let none : unit t =
+  { printer = (fun _o () -> ()) ;
+    scanner = (fun _i o -> Some ((), o)) ;
+    descr = "" }
+(*$= none
+  (Some ((), 0)) (of_string none "" 0)
+ *)
+
+
+(*$inject
+  let groupings = [ "(",")" ; "[","]" ; "[|","|]" ]
+  let delims = [ "," ; ";" ]
+  type color = RGB of int * int * int
+             | Named of string
+             | Transparent
+
+  let first ppp = cst "(" -+ ppp
+  let last ppp = ppp +- cst ")"
+  let sep = cst ","
+  let tuple3 (p1 : 'a t) (p2 : 'b t) (p3 : 'c t) : ('a * 'b * 'c) t =
+    first p1 +- sep ++ p2 +- sep ++ last p3 >>:
+      ((fun (v1,v2,v3) -> (v1,v2),v3),
+       (fun ((v1,v2),v3) -> v1,v2,v3))
+
+  let color : color t = union "" "" "" groupings delims identifier (
+    variant " " "" " of " "RGB" (tuple3 int int int) |||
+    variant " " "" " of " "Named" string |||
+    variant "" "" " of " "Transp" none) >>:
+    ((function RGB (r,g,b) -> Some (Some (r,g,b), None), None
+             | Named name -> Some (None, Some name), None
+             | Transparent -> None, Some ()),
+     (function Some (Some (r,g,b), _), _ -> RGB (r,g,b)
+             | Some (_, Some name), _ -> Named name
+             | _ -> Transparent))
+ *)
+(*$= color & ~printer:id
+  "RGB (0,0,255)" (to_string color (RGB (0, 0, 255)))
+  "Transp" (to_string color Transparent)
+ *)
+(*$= color & ~printer:(function None -> "" | Some (p, o) -> Printf.sprintf "(%s, %d)" (to_string color p) o)
+  (Some (RGB (0,0,255), 12)) (of_string color "RGB(0,0,255)" 0)
+  (Some (RGB (0,0,255), 13)) (of_string color "RGB (0,0,255)" 0)
+  (Some (RGB (0,0,255), 15)) (of_string color "  RGB (0,0,255)" 0)
+  (Some (RGB (0,0,255), 22)) (of_string color "RGB  ( 0 ,  0, 255  ) " 0)
+  (Some (Transparent, 8)) (of_string color " Transp " 0)
+ *)
+
+exception MissingRequiredField
+
+(* When using union for building a record, aggregate the tree of pairs at
+ * every field.  This merge hass to be recursive so we must build the merge
+ * function as we build the total tree of pairs with <->. *)
+type 'a merge_u = 'a option -> 'a option -> 'a option
+let record opn cls eq sep groupings delims name_ppp ((p, s, id : 'a u), (merge : 'a merge_u)) =
+  (* In a record we assume there are nothing special to open/close a single
+   * field. If not, add 2 parameters in the record: *)
+  let nf = union "" "" eq groupings (cls::delims) name_ppp (p, s, id) in
+  { printer = (fun o v ->
+      o opn ;
+      p name_ppp false o v ;
+      o cls) ;
+    scanner = (fun i o ->
+      let o = skip_blanks i o in
+      let opn_len = String.length opn in
+      let sep_len = String.length sep in
+      let cls_len = String.length cls in
+      match i o opn_len with
+      | str when str = opn ->
+        let o = skip_blanks i (o + opn_len) in
+        let rec loop prev o =
+          match nf.scanner i o with
+          | None -> prev, o
+          | Some (x, o) ->
+            let prev' = merge prev (Some x) in
+            let o = skip_blanks i o in
+            (match i o sep_len with
+            | str when str = sep ->
+              loop prev' (o + sep_len)
+            | _ -> prev', o) in
+        let res, o = loop None o in
+        (* Check we are done *)
+        let o = skip_blanks i o in
+        (match i o cls_len with
+        | str when str = cls ->
+          (match res with
+          | None -> None
+          | Some r -> Some (r, o + cls_len))
+        | _ -> None)
+      | _ -> None) ;
+    descr = opn ^ id ^ cls}
+
+(* But then we need a special combinator to also compute the merge of the pairs of pairs... *)
+let (<->) ((psi1 : 'a u), (m1 : 'a merge_u)) ((psi2 : 'b u), (m2 : 'b merge_u)) : (('a option * 'b option) u * ('a option * 'b option) merge_u) =
+  (psi1 ||| psi2),
+  (fun (v1 : ('a option * 'b option) option) (v2 : ('a option * 'b option) option) ->
+    if v1 = None && v2 = None then None else
+    Some (
+      let map_get f = function
+        | None -> None
+        | Some x -> f x in
+      m1 (map_get fst v1) (map_get fst v2),
+      m2 (map_get snd v1) (map_get snd v2)))
+
+let field eq sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
+  (variant eq sep "" name ppp),
+  (fun r1 r2 ->
+    if r2 = None then (
+      if r1 = None then default else r1
+    ) else r2)
+
+(*$inject
+  type person = { name: string ; age: int ; male: bool }
+
+  let person : person t =
+    record "{" "}" "=" ";" groupings delims identifier (
+      field "=" "; " "name" string <->
+      field "=" "; " "age" int <->
+      field "=" "; " ~default:true "male" bool) >>:
+      ((fun { name ; age ; male } -> Some (Some name, Some age), Some male),
+       (function (Some (Some name, Some age), Some male) -> { name ; age ; male }
+               | _ -> raise MissingRequiredField))
+ *)
+(*$= person & ~printer:id
+  "{name=\"John\"; age=41; male=true}" (to_string person { name = "John"; age = 41; male = true })
+ *)
+(*$= person & ~printer:(function None -> "" | Some (p, o) -> Printf.sprintf "(%s, %d)" (to_string person p) o)
+  (Some ({ name = "John"; age = 41; male = true }, 30)) \
+    (of_string person "{name=\"John\";age=41;male=true}" 0)
+  (Some ({ name = "John"; age = 41; male = true }, 30)) \
+    (of_string person "{age=41;name=\"John\";male=true}" 0)
+  (Some ({ name = "John"; age = 41; male = true }, 39)) \
+    (of_string person " {  age=41 ; name = \"John\" ;male =true}" 0)
+  (Some ({name="John";age=41;male=true}, 28)) \
+    (of_string person " { age = 41 ; name = \"John\"}" 0)
+ *)
