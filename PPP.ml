@@ -565,7 +565,7 @@ struct
               s h |> map (fun x -> x, o)
             ) else None)
         | _ -> None) ;
-      descr = "record of "^ id }
+      descr = "{ "^ id ^" }"}
 
   let field ?default name ppp =
     (fun o v ->
@@ -627,7 +627,7 @@ struct
           | Some o ->
             let value = chop_sub (i o' (o-o')) 0 (o-o') in
             s name value |> map (fun x -> x, o))) ;
-      descr = "variant of "^ id }
+      descr = id }
 
   let (|||) (p1, s1, id1) (p2, s2, id2) =
     (fun (o : string -> unit) (v1,v2) ->
