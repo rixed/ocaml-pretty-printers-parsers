@@ -1,7 +1,8 @@
 type writer = string -> unit
 type reader = int -> int -> string
 type 'a t = { printer : writer -> 'a -> unit ;
-              scanner : reader -> int -> ('a * int) option }
+              scanner : reader -> int -> ('a * int) option ;
+              descr : string }
 
 let may f = function None -> () | Some x -> f x
 let map f = function None -> None | Some x -> Some (f x)
@@ -77,16 +78,17 @@ let next_word i o =
 let identifier =
   { printer = (fun o x -> o x) ;
     scanner = (fun i o ->
-    let rec loop oo =
-      let s = i oo 1 in
-      if s = "" then oo else
-      let c = s.[0] in
-      if is_letter c || c = '_' || oo > o && is_digit c then
-        loop (oo+1)
-      else
-        oo in
-    let oo = loop o in
-    if oo > o then Some (i o (oo-o), oo) else None) }
+      let rec loop oo =
+        let s = i oo 1 in
+        if s = "" then oo else
+        let c = s.[0] in
+        if is_letter c || c = '_' || oo > o && is_digit c then
+          loop (oo+1)
+        else
+          oo in
+      let oo = loop o in
+      if oo > o then Some (i o (oo-o), oo) else None) ;
+    descr = "identifier" }
 (*$= identifier & ~printer:(function None -> "" | Some (i, o) -> Printf.sprintf "(%s,%d)" i o)
   (Some ("glop", 4)) (of_string identifier "glop" 0)
   (Some ("glop", 4)) (of_string identifier "glop\n" 0)
@@ -138,7 +140,7 @@ let string_of lst len =
   "" (string_of [] 0)
  *)
 
-let seq opn cls sep iteri of_rev_list ppp =
+let seq name opn cls sep iteri of_rev_list ppp =
   { printer = (fun o v ->
       o opn ;
       iteri (fun i v' ->
@@ -162,12 +164,13 @@ let seq opn cls sep iteri of_rev_list ppp =
           else None in
       if i o (String.length opn) = opn then
         parse_item [] (o + String.length opn)
-      else None) }
+      else None) ;
+    descr = name ^" of "^ ppp.descr }
 (*$= seq & ~printer:(function None -> "" | Some (l,o) -> Printf.sprintf "(%s, %d)" (String.concat ";" l) o)
   (Some (["a";"b";"cde"], 9)) \
-    (of_string (seq "[" "]" ";" List.iteri List.rev identifier) "[a;b;cde]" 0)
+    (of_string (seq "list" "[" "]" ";" List.iteri List.rev identifier) "[a;b;cde]" 0)
   (Some (["a";"b";"cde"], 9)) \
-    (of_string (seq "" "" "--" List.iteri List.rev identifier) "a--b--cde" 0)
+    (of_string (seq "sequence" "" "" "--" List.iteri List.rev identifier) "a--b--cde" 0)
  *)
 
 let (++) ppp1 ppp2 =
@@ -178,7 +181,8 @@ let (++) ppp1 ppp2 =
       match ppp1.scanner i o with
       | None -> None
       | Some (v1, o) ->
-        ppp2.scanner i o |> map (fun (v2, o) -> (v1, v2), o)) }
+        ppp2.scanner i o |> map (fun (v2, o) -> (v1, v2), o)) ;
+    descr = ppp1.descr ^", "^ ppp2.descr }
 
 let (-+) ppp1 ppp2 =
   { printer = (fun o v2 ->
@@ -187,7 +191,8 @@ let (-+) ppp1 ppp2 =
     scanner = (fun i o ->
       match ppp1.scanner i o with
       | None -> None
-      | Some ((), o) -> ppp2.scanner i o) }
+      | Some ((), o) -> ppp2.scanner i o) ;
+    descr = ppp2.descr }
 
 let (+-) ppp1 ppp2 =
   { printer = (fun o v1 ->
@@ -197,7 +202,8 @@ let (+-) ppp1 ppp2 =
       match ppp1.scanner i o with
       | None -> None
       | Some (v, o) ->
-        ppp2.scanner i o |> map (fun (_, o) -> v, o)) }
+        ppp2.scanner i o |> map (fun (_, o) -> v, o)) ;
+    descr = ppp1.descr }
 
 (* Always allow blanks around the constant *)
 let cst s =
@@ -208,14 +214,16 @@ let cst s =
       if i o l = s then (
         let o = skip_blanks i (o + l) in
         Some ((), o)
-      ) else None) }
+      ) else None) ;
+    descr = "" }
 
 let default v ppp =
   { printer = ppp.printer ;
     scanner = (fun i o ->
       match ppp.scanner i o with
       | None -> Some (v, o)
-      | x -> x) }
+      | x -> x) ;
+    descr = ppp.descr }
 (*$= default & ~printer:(function None -> "" | Some (d, o) -> Printf.sprintf "(%d, %d)" d o)
   (Some (42,4)) (of_string (default 17 (cst "{" -+ OCaml.int +- cst "}")) "{42}" 0)
   (Some (17,0)) (of_string (default 17 (cst "{" -+ OCaml.int +- cst "}")) "pas glop" 0)
@@ -226,7 +234,8 @@ let optional ppp =
     scanner = (fun i o ->
       match ppp.scanner i o with
       | Some (x, o') -> Some (Some x, o')
-      | None -> Some (None, o)) }
+      | None -> Some (None, o)) ;
+    descr = "optional "^ ppp.descr }
 (*$= optional & ~printer:(function None -> "" | Some (None, _) -> Printf.sprintf "none" | Some (Some d, o) -> Printf.sprintf "(%d, %d)" d o)
   (Some (Some 42,4)) (of_string (optional (cst "{" -+ OCaml.int +- cst "}")) "{42}" 0)
   (Some (None,0)) (of_string (optional (cst "{" -+ OCaml.int +- cst "}")) "pas glop" 0)
@@ -235,7 +244,8 @@ let optional ppp =
 let (>>:) ppp (f,f') =
   { printer = (fun o v -> ppp.printer o (f v)) ;
     scanner = (fun i o ->
-      ppp.scanner i o |> map (fun (x,o) -> f' x, o)) }
+      ppp.scanner i o |> map (fun (x,o) -> f' x, o)) ;
+    descr = ppp.descr }
 
 
 module OCaml=
@@ -246,7 +256,8 @@ struct
     { printer = (fun o () -> o "()") ;
       scanner = (fun i o ->
         let o = skip_blanks i o in
-        if i o 2 = "()" then Some ((), o+2) else None) }
+        if i o 2 = "()" then Some ((), o+2) else None) ;
+      descr = "unit" }
   (*$= unit
     (Some ((), 2)) (of_string unit "()" 0)
    *)
@@ -259,7 +270,8 @@ struct
           (match next_word_eq "false" i o with
           | true, o -> Some (false, o)
           | _ -> None)
-        | x -> Some x) }
+        | x -> Some x) ;
+      descr = "boolean" }
 (*$= bool & ~printer:id
   "true" (to_string bool true)
   "false" (to_string bool false)
@@ -282,7 +294,8 @@ struct
             loop (o+1) (o+1) s (n*10 + digit_of d) Int
           | _ -> oo, s, n in
         let oo, s, n = loop o o 1 0 IntStart in
-        if oo > o then Some (s*n, oo) else None) }
+        if oo > o then Some (s*n, oo) else None) ;
+      descr = "integer" }
 (*$= int & ~printer:id
   "42" (to_string int 42)
   "-42" (to_string int (-42))
@@ -322,7 +335,8 @@ struct
         let oo, s, n, sc, es, exp = loop o o 1 0 0 1 0 IntStart in
         if oo > o then Some (
           float_of_int (s * n) *. 10. ** float_of_int (es * exp - sc), oo)
-        else None) }
+        else None) ;
+      descr = "float" }
 (*$= float & ~printer:id
   "-0.00010348413604" (to_string float (-0.00010348413604))
  *)
@@ -378,7 +392,8 @@ struct
               loop (o+1) l s (10*bsn + digit_of d) Backslash
             )
           | _ -> None (* everything else is game-over *) in
-        loop o [] 0 0 First) }
+        loop o [] 0 0 First) ;
+      descr = "string" }
   (*$= string & ~printer:id
      "\"glop\"" (to_string string "glop")
      "\"\"" (to_string string "")
@@ -391,7 +406,7 @@ struct
    *)
 
   let list (ppp : 'a t) : 'a list t =
-    seq "[" "]" ";" List.iteri List.rev ppp
+    seq "list" "[" "]" ";" List.iteri List.rev ppp
   (*$= list & ~printer:id
      "[]" (to_string (list int) [])
      "[1;2;3]" (to_string (list int) [1;2;3])
@@ -402,7 +417,7 @@ struct
    *)
 
   let array (ppp : 'a t) : 'a array t =
-    seq "[|" "|]" ";" Array.iteri (fun l -> Array.of_list (List.rev l)) ppp
+    seq "array" "[|" "|]" ";" Array.iteri (fun l -> Array.of_list (List.rev l)) ppp
   (*$= array & ~printer:id
      "[||]" (to_string (array string) [||])
      "[|\"[\";\"|\";\";\"|]" (to_string (array string) [| "["; "|"; ";" |])
@@ -518,7 +533,7 @@ struct
     None (skip_any (string_reader "{ a = 43 ; glop=1, 2 ); } ") 0)
    *)
 
-  let record (p, s) =
+  let record (p, s, id) =
     { printer = (fun (o : string->unit) v ->
         o "{" ;
         p o v ;
@@ -549,7 +564,8 @@ struct
             if !valid then (
               s h |> map (fun x -> x, o)
             ) else None)
-        | _ -> None) }
+        | _ -> None) ;
+      descr = "record of "^ id }
 
   let field ?default name ppp =
     (fun o v ->
@@ -559,10 +575,11 @@ struct
       match Hashtbl.find h name with
       | exception Not_found -> default
       | str ->
-        ppp.scanner (string_reader str) 0 |> map fst)
+        ppp.scanner (string_reader str) 0 |> map fst),
+    (name ^": "^ ppp.descr)
 
   (* Compose 2 fields *)
-  let (<->) (p1, s1) (p2, s2) =
+  let (<->) (p1, s1, id1) (p2, s2, id2) =
     (fun o (v1, v2) ->
       p1 o v1 ;
       o ";" ;
@@ -571,7 +588,8 @@ struct
       match s1 h with
       | None -> None
       | Some v1 ->
-        s2 h |> map (fun v2 -> v1, v2))
+        s2 h |> map (fun v2 -> v1, v2)),
+    (id1 ^"; "^ id2)
 
   (*$inject
     type person = { name: string ; age: int ; male : bool }
@@ -596,7 +614,7 @@ struct
       (of_string person " { age = 41 ; name = \"John\"}" 0)
    *)
 
-  let union (p, s) =
+  let union (p, s, id) =
     { printer = p ;
       scanner = (fun i o ->
         let o = skip_blanks i o in
@@ -608,9 +626,10 @@ struct
           | None -> None
           | Some o ->
             let value = chop_sub (i o' (o-o')) 0 (o-o') in
-            s name value |> map (fun x -> x, o))) }
+            s name value |> map (fun x -> x, o))) ;
+      descr = "variant of "^ id }
 
-  let (|||) (p1, s1) (p2, s2) =
+  let (|||) (p1, s1, id1) (p2, s2, id2) =
     (fun (o : string -> unit) (v1,v2) ->
       may (p1 o) v1 ;
       may (p2 o) v2),
@@ -620,7 +639,8 @@ struct
       | None ->
         (match s2 name value with
         | Some _ as x -> Some (None, x)
-        | None -> None))
+        | None -> None)),
+    (id1 ^" | "^ id2)
 
   (* turn a pretty-printer-parser into the version above usable by union: *)
   let variant name ppp =
@@ -629,13 +649,15 @@ struct
       if n = name then (
         let i = string_reader v in
         ppp.scanner i 0 |> map fst
-      ) else None)
+      ) else None),
+    (if ppp.descr = "" then name else name ^" of "^ ppp.descr)
 
   (* Like unit but with no representation, useful for
    * constructor without arguments *)
   let none : unit t =
     { printer = (fun _o () -> ()) ;
-      scanner = (fun _i o -> Some ((), o)) }
+      scanner = (fun _i o -> Some ((), o)) ;
+      descr = "" }
   (*$= none
     (Some ((), 0)) (of_string none "" 0)
    *)
@@ -705,7 +727,8 @@ end
 
 let delayed (ppp : 'a t) : (unit -> 'a) t =
   { printer = (fun o v -> ppp.printer o (v ())) ;
-    scanner = (fun i o -> ppp.scanner i o |> map (fun (x, o) -> (fun () -> x), o)) }
+    scanner = (fun i o -> ppp.scanner i o |> map (fun (x, o) -> (fun () -> x), o)) ;
+    descr = ppp.descr }
 (*$= delayed
   "42" (to_string (delayed OCaml.int) (fun () -> 42))
  *)
