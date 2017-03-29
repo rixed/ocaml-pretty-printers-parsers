@@ -7,7 +7,7 @@ WARNS      = Ael-31-41-44-45-48
 override OCAMLOPTFLAGS += $(INCS) -w $(WARNS) -g -annot -I $(top_srcdir) -O2
 override OCAMLFLAGS    += $(INCS) -w $(WARNS) -g -annot -I $(top_srcdir)
 
-SOURCES = PPP.ml
+SOURCES = PPP.ml PPP_OCaml.ml
 
 # Common rules
 .SUFFIXES: .ml .mli .cmo .cmi .cmx .cmxs .annot
@@ -26,10 +26,10 @@ all: .depend PPP.cmxa PPP.cma
 %.cmxs: %.ml
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -package "$(PACKAGES)" -o $@ -shared $<
 
-PPP.cmxa: PPP.cmx
+PPP.cmxa: PPP.cmx PPP_OCaml.cmx
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -a -package "$(PACKAGES)" $^ -o $@
 
-PPP.cma: PPP.cmo
+PPP.cma: PPP.cmo PPP_OCaml.cmo
 	ocamlfind ocamlc   $(OCAMLFLAGS) -a -linkpkg -package "$(PACKAGES)" -custom $^ -o $@
 
 clean:
@@ -43,7 +43,7 @@ distclean: clean
 all_tests.ml: $(SOURCES)
 	$(QTEST) --shuffle -o $@ extract $^
 
-all_tests.opt: PPP.cmx all_tests.ml
+all_tests.opt: PPP.cmx PPP_OCaml.cmx all_tests.ml
 	$(OCAMLOPT) -o $@ $(SYNTAX) -package "$(PACKAGES)" -package qcheck -linkpkg $(OCAMLOPTFLAGS) $^
 
 check: all_tests.opt
@@ -51,7 +51,12 @@ check: all_tests.opt
 
 # Installation
 
-install: META PPP.cmx PPP.cmxa PPP.cmi PPP.cmo PPP.cma PPP.a
+INSTALLED = \
+	META PPP.cmxa PPP.cma PPP.a \
+	PPP.cmx PPP.cmi PPP.cmo \
+	PPP_OCaml.cmx PPP_OCaml.cmi PPP_OCaml.cmo
+
+install: $(INSTALLED)
 	ocamlfind install ppp $^
 
 uninstall:
