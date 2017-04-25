@@ -15,6 +15,8 @@ let unit : unit t = cst "null"
 
 let bool = bool
 let int = int
+let int32 = int32
+let int64 = int64
 let float = float
 let string = PPP.string (* not really but let's pretend for now *)
 

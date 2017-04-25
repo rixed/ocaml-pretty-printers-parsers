@@ -290,20 +290,41 @@ let bool : bool t =
 
 (* Int syntax is generic enough: *)
 (* General format: [sign] digits *)
+exception IntegerOverflow
 type int_part = IntStart | Int
-let int : int t =
-  { printer = (fun o v -> o (string_of_int v)) ;
+let int64 : int64 t =
+  { printer = (fun o v -> o (Int64.to_string v)) ;
     scanner = (fun i o ->
       let rec loop o oo s n part =
         match part, i o 1 with
         | IntStart, "+" -> loop (o+1) oo s n Int
         | IntStart, "-" -> loop (o+1) oo (~- s) n Int
         | (IntStart|Int), d when str_is_digit d ->
-          loop (o+1) (o+1) s (n*10 + digit_of d) Int
+          let d = Int64.of_int (digit_of d) in
+          if n >= Int64.(sub 922337203685477580L d) then
+            raise IntegerOverflow ;
+          loop (o+1) (o+1) s Int64.(add (mul n 10L) d) Int
         | _ -> oo, s, n in
-      let oo, s, n = loop o o 1 0 IntStart in
-      if oo > o then Some (s*n, oo) else None) ;
+      let oo, s, n = loop o o 1 0L IntStart in
+      let n = if s < 0 then Int64.neg n else n in
+      if oo > o then Some (n, oo) else None) ;
     descr = "integer" }
+
+let int32 : int32 t = int64 >>:
+  ((fun n -> Int64.of_int32 n),
+   (fun n ->
+      if n >= 2147483648L || n < -2147483648L then
+        raise IntegerOverflow
+      else Int64.to_int32 n))
+
+let max_int_L = Int64.of_int max_int
+let min_int_L = Int64.of_int min_int
+let int : int t = int64 >>:
+  ((fun n -> Int64.of_int n),
+   (fun n ->
+      if n > max_int_L || n < min_int_L then
+        raise IntegerOverflow
+      else Int64.to_int n))
 (*$= int & ~printer:id
   "42" (to_string int 42)
   "-42" (to_string int (-42))
