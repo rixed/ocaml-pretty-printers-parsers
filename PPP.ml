@@ -175,6 +175,17 @@ let rec until u i o =
   if s <> u then until u i (o + 1) else
   Some o
 
+let next_word is_word i o =
+  let rec skip_word o =
+    let s = i o 1 in
+    if s = "" then o else (
+      let c = s.[0] in
+      if is_word c then skip_word (o+1) else o
+    ) in
+  let o' = skip_word o in
+  if o' = o then None else
+  Some (i o (o'-o), o')
+
 let seq name opn cls sep iteri of_rev_list ppp =
   { printer = (fun o v ->
       o opn ;
