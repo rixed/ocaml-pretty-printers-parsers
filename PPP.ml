@@ -15,9 +15,9 @@ let to_string ppp v =
   ppp.printer o v ;
   Buffer.contents buf
 
-let to_out_channel chan ppp v = ppp.printer (output_string chan) v
-let to_stdout pp v = to_out_channel stdout pp v
-let to_stderr pp v = to_out_channel stderr pp v
+let to_out_channel ppp chan v = ppp.printer (output_string chan) v
+let to_stdout pp v = to_out_channel pp stdout v
+let to_stderr pp v = to_out_channel pp stderr v
 
 let string_reader s o l =
   if o + l > String.length s then
