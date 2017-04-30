@@ -27,6 +27,51 @@ let string_reader s o l =
 
 let of_string ppp s = ppp.scanner (string_reader s)
 
+(* We want to allow non-seekable channels therefore we must keep a short
+ * past-buffer in case the scanners wants to rollback a bit: *)
+exception Not_implemented
+let of_in_channel ppp ?(buf_capacity=4096) ic =
+  let buf = Bytes.create buf_capacity
+  and buf_length = ref 0
+  and buf_offset = ref 0 (* offset in ic of the first byte of buf *) in
+  let reader o l =
+    assert (l <= buf_capacity) ;
+    if o < !buf_offset then invalid_arg "Cannot backtrack that far"
+    else if o > !buf_offset + !buf_length then
+      raise Not_implemented (* No real reason not to allow this, but will have to read the skipped byte *)
+    else (
+      let already_read = !buf_offset + !buf_length - o in
+      assert (already_read >= 0) ;
+      let to_read = max 0 (l - already_read) in
+      let read_into =
+        if to_read <= buf_capacity - !buf_length then (
+          !buf_length
+        ) else (
+          (* Need to make room *)
+          let keep = buf_capacity - to_read in
+          let drop = !buf_length - keep in
+          Bytes.blit buf drop buf 0 keep ;
+          buf_offset := !buf_offset + drop ;
+          buf_length := !buf_length - drop ;
+          keep
+        ) in
+      let read_len = try (
+        really_input ic buf read_into to_read ;
+        to_read
+      ) with End_of_file -> 0 in
+      buf_length := !buf_length + read_len ;
+      (* Printf.eprintf "Buffer: length=%d, offset=%d, content=%S\n%!"
+          !buf_length !buf_offset (Bytes.to_string buf) ; *)
+      let str_start = o - !buf_offset in
+      let str_len = min l (!buf_length - str_start) in
+      Bytes.sub_string buf str_start str_len
+    ) in
+  ppp.scanner reader
+
+let of_stdin ?buf_capacity ppp = of_in_channel ?buf_capacity ppp stdin
+
+(* TODO: of_seekable_in_channel *)
+
 let next_eq w i o =
   if i o (String.length w) = w then
     true, o + String.length w
@@ -228,7 +273,7 @@ let (++) ppp1 ppp2 =
       | None -> None
       | Some (v1, o) ->
         ppp2.scanner i o |> map (fun (v2, o) -> (v1, v2), o)) ;
-    descr = ppp1.descr ^", "^ ppp2.descr }
+    descr = ppp1.descr ^" followed by "^ ppp2.descr }
 
 let (-+) ppp1 ppp2 =
   { printer = (fun o v2 ->
@@ -238,7 +283,7 @@ let (-+) ppp1 ppp2 =
       match ppp1.scanner i o with
       | None -> None
       | Some ((), o) -> ppp2.scanner i o) ;
-    descr = ppp2.descr }
+    descr = ppp1.descr ^" followed by "^ ppp2.descr }
 
 let (+-) ppp1 ppp2 =
   { printer = (fun o v1 ->
@@ -249,7 +294,18 @@ let (+-) ppp1 ppp2 =
       | None -> None
       | Some (v, o) ->
         ppp2.scanner i o |> map (fun (_, o) -> v, o)) ;
-    descr = ppp1.descr }
+    descr = ppp1.descr ^" followed by "^ ppp2.descr }
+
+let (--) ppp1 ppp2 =
+  { printer = (fun o _ ->
+      ppp1.printer o () ;
+      ppp2.printer o ()) ;
+    scanner = (fun i o ->
+      match ppp1.scanner i o with
+      | None -> None
+      | Some ((), o) ->
+        ppp2.scanner i o |> map (fun (_, o) -> (), o)) ;
+    descr = ppp1.descr ^" followed by "^ ppp2.descr }
 
 let (>>:) ppp (f,f') =
   { printer = (fun o v -> ppp.printer o (f v)) ;
@@ -267,7 +323,7 @@ let cst s =
         let o = skip_blanks i (o + l) in
         Some ((), o)
       ) else None) ;
-    descr = "" }
+    descr = s }
 
 let bool : bool t =
   { printer = (fun o v -> o (if v then "true" else "false")) ;
@@ -720,3 +776,8 @@ let field eq sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
   (Some ({name="John";age=41;male=true}, 28)) \
     (of_string person " { age = 41 ; name = \"John\"}" 0)
  *)
+
+let to_unit def ppp = ppp >>: ((fun _ -> def), ignore)
+
+let newline =
+  to_unit None (optional (cst "\r")) -- cst "\n"
