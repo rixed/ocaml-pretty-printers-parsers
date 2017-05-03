@@ -113,6 +113,14 @@ let result ok_ppp err_ppp = union (
   (Some (Ok 42, 5)) (of_string (result int string) "Ok 42" 0)
  *)
 
+let option ppp = union (
+  variant "Some" ppp |||
+  variant "None" unit) >>:
+  ((function Some x -> Some x, None
+           | None -> None, Some ()),
+   (function Some x, _ -> Some x
+           | None, _ -> None))
+
 (*$inject
   let test_id p x =
     let s = to_string p x in
