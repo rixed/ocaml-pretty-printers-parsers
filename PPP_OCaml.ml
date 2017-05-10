@@ -98,7 +98,7 @@ let field ?default name x = PPP.field "=" "; " ?default name x
 
 let union x = PPP.union "" "" "" groupings delims identifier x
 let (|||) = PPP.(|||)
-let variant name x = PPP.variant "" "" " of " name x
+let variant name x = PPP.variant " " "" " of " name x
 
 let result ok_ppp err_ppp = union (
   variant "Ok" ok_ppp |||
@@ -108,7 +108,13 @@ let result ok_ppp err_ppp = union (
    (function Some x, _-> Ok x
            | _, Some e -> Error e
            | _ -> assert false))
-(*$= result & ~printer:(function None -> "" | Some (Ok x, o) -> Printf.sprintf "Ok(%d,%d)" x o | Some (Error e, o) -> Printf.sprintf "Err(%s,%d)" e o)
+(*$inject
+  let printer_of_ppp ppp = function
+    | None -> "None"
+    | Some (x, l) ->
+      Printf.sprintf "Some(%s, %d)" (PPP.to_string ppp x) l
+ *)
+(*$= result & ~printer:(printer_of_ppp (result int string))
   (Some (Error "test", 10)) (of_string (result int string) "Err \"test\"" 0)
   (Some (Ok 42, 5)) (of_string (result int string) "Ok 42" 0)
  *)
@@ -120,6 +126,11 @@ let option ppp = union (
            | None -> None, Some ()),
    (function Some x, _ -> Some x
            | None, _ -> None))
+
+(*$= option & ~printer:(printer_of_ppp (option int))
+  (Some (Some 3, 6)) \
+    (let ppp = option int in let s = Some 3 |> to_string ppp in of_string ppp s 0)
+ *)
 
 (*$inject
   let test_id p x =
