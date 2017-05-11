@@ -1,8 +1,4 @@
 top_srcdir = .
-OCAMLC     = ocamlfind ocamlc
-OCAMLOPT   = ocamlfind ocamlopt
-OCAMLDEP   = ocamlfind ocamldep
-QTEST      = qtest
 WARNS      = Ael-31-41-44-45-48
 override OCAMLOPTFLAGS += $(INCS) -w $(WARNS) -g -annot -I $(top_srcdir) -O2
 override OCAMLFLAGS    += $(INCS) -w $(WARNS) -g -annot -I $(top_srcdir)
@@ -36,15 +32,15 @@ clean:
 	$(RM) *.cm[iox] *.cmxs *.a *.s *.o .depend *.annot all_tests.*
 
 distclean: clean
-	$(RM) *.cma *.cmxa oUnit-anon.cache qtest.targets.log
+	$(RM) *.cma *.cmxa *.opt oUnit-anon.cache qtest.targets.log
 
 # Tests
 
 all_tests.ml: $(SOURCES)
-	$(QTEST) --shuffle -o $@ extract $^
+	qtest --shuffle -o $@ extract $^
 
 all_tests.opt: $(SOURCES:.ml=.cmx) all_tests.ml
-	$(OCAMLOPT) -o $@ $(SYNTAX) -package "$(PACKAGES)" -package qcheck -linkpkg $(OCAMLOPTFLAGS) $^
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -o $@ $(SYNTAX) -package "$(PACKAGES)" -package qcheck -linkpkg $^
 
 check: all_tests.opt
 	@./all_tests.opt || echo "FAILURE"
@@ -71,6 +67,6 @@ dep:
 	$(MAKE) .depend
 
 .depend: $(SOURCES)
-	$(OCAMLDEP) -package "$(PACKAGES)" $(filter %.ml, $(SOURCES)) $(filter %.mli, $(SOURCES)) > $@
+	ocamlfind ocamldep -package "$(PACKAGES)" $(filter %.ml, $(SOURCES)) $(filter %.mli, $(SOURCES)) > $@
 
 -include .depend
