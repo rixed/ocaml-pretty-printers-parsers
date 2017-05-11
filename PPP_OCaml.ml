@@ -7,7 +7,7 @@ open PPP
   let to_string = PPP.to_string
  *)
 
-(* Import the infix operators *)
+(* Import some operators from PPP (infix ops + those used by ppx_ppp) *)
 let (++) = (++)
 let (-+) = (-+)
 let (+-) = (+-)
@@ -49,10 +49,13 @@ let array (ppp : 'a t) : 'a array t =
   (Some ([| "1" ; "2" |], 11)) (of_string (array string) "[|\"1\";\"2\"|]" 0)
  *)
 
+let tuple_open = "("
+let tuple_close = ")"
+let tuple_sep = ","
 module Tuple = struct
-  let first ppp = cst "(" -+ ppp
-  let last ppp = ppp +- cst ")"
-  let sep = cst ","
+  let first ppp = cst tuple_open -+ ppp
+  let last ppp = ppp +- cst tuple_close
+  let sep = cst tuple_sep
 
   let tuple2 (p1 : 'a t) (p2 : 'b t) : ('a * 'b) t =
     first p1 +- sep ++ last p2

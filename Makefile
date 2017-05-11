@@ -11,7 +11,7 @@ SOURCES = PPP.ml PPP_OCaml.ml PPP_JSON.ml
 
 PACKAGES = 
 
-all: .depend PPP.cmxa PPP.cma
+all: .depend PPP.cmxa PPP.cma ppx_ppp.opt ppx_test.opt
 
 %.cmo %.annot: %.ml
 	ocamlfind ocamlc   $(OCAMLFLAGS) -package "$(PACKAGES)" -c $<
@@ -28,6 +28,14 @@ PPP.cmxa: $(SOURCES:.ml=.cmx)
 PPP.cma: $(SOURCES:.ml=.cmo)
 	ocamlfind ocamlc   $(OCAMLFLAGS) -a -linkpkg -package "$(PACKAGES)" -custom $^ -o $@
 
+# PPX
+
+ppx_ppp.opt: ppx_ppp.ml
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -w -27 -package batteries,compiler-libs,ppx_tools.metaquot -linkpkg $^ -o $@
+
+ppx_test.opt: PPP.cmxa ppx_ppp.opt ppx_test.ml
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -ppx ./ppx_ppp.opt -package "$(PACKAGES)" PPP.cmxa ppx_test.ml -o $@
+
 clean:
 	$(RM) *.cm[iox] *.cmxs *.a *.s *.o .depend *.annot all_tests.*
 
@@ -40,7 +48,7 @@ all_tests.ml: $(SOURCES)
 	qtest --shuffle -o $@ extract $^
 
 all_tests.opt: $(SOURCES:.ml=.cmx) all_tests.ml
-	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -o $@ $(SYNTAX) -package "$(PACKAGES)" -package qcheck -linkpkg $^
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -o $@ -package "$(PACKAGES)" -package qcheck -linkpkg $^
 
 check: all_tests.opt
 	@./all_tests.opt || echo "FAILURE"
@@ -50,7 +58,8 @@ check: all_tests.opt
 INSTALLED = \
 	META PPP.cmxa PPP.cma PPP.a \
 	PPP.cmx PPP.cmi PPP.cmo \
-	PPP_OCaml.cmx PPP_OCaml.cmi PPP_OCaml.cmo
+	PPP_OCaml.cmx PPP_OCaml.cmi PPP_OCaml.cmo \
+	ppx_ppp.opt
 
 install: $(INSTALLED)
 	ocamlfind install ppp $^
