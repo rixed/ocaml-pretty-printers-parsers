@@ -8,5 +8,6 @@ oUnit-anon.cache
 *.a
 *.annot
 *.o
+*.opt
 .depend
 all_tests.*

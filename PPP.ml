@@ -523,6 +523,9 @@ let rec skip_any groupings delims i o =
   if c = "" then Some o
   else if c = "\"" then skip_string i (o+1)
   else if List.exists (stream_starts_with i o) delims then Some o
+  (* Ok but this value can be itself in an outside group so group ends
+   * must count as delimiters: *)
+  else if List.exists (fun (_, cls) -> stream_starts_with i o cls) groupings then Some o
   else (
     match List.find (fun (opn, _) ->
       stream_starts_with i o opn) groupings with

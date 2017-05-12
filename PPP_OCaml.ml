@@ -1,6 +1,11 @@
 open PPP
-(*$inject open PPP *)
-(*$inject let id x = x *)
+(* We must not open PPP in the tests or PPP bindings would overwrite again our
+ * overwritten ones: *)
+(*$inject
+  let id x = x
+  let of_string = PPP.of_string
+  let to_string = PPP.to_string
+ *)
 
 (* Import the infix operators *)
 let (++) = (++)
@@ -152,3 +157,22 @@ let option ppp = union (
   Q.string (test_id string)
   Q.(array (pair (list int) bool)) (test_id (array (pair (list int) bool)))
  *)
+
+  (* Test none *)
+(*$inject
+  type test_var = A | B
+  let test_var_ppp = union (
+    variant "A" none|||
+    variant "B" none) >>:
+  ((function A -> Some (), None
+           | B -> None, Some ()),
+   (function Some (), _ -> A
+           | _, Some () -> B
+           | _ -> assert false))
+  type test_none = test_var list
+  let test_none_ppp = list test_var_ppp
+ *)
+ (*$= test_none_ppp & ~printer:(printer_of_ppp test_none_ppp)
+   (Some ([A], 3)) (of_string test_none_ppp "[A]" 0)
+   (Some ([A; B], 6)) (of_string test_none_ppp "[A; B]" 0)
+  *)
