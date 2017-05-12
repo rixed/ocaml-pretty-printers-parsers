@@ -573,7 +573,7 @@ type 'a u =
   (string t -> bool -> 'a printer) *    (* name ppp, bool is: do we need a separator? *)
   (string -> 'a scanner) *  (* string is: field value that's going to be read *)
   string                    (* how to build the type name *)
-let union opn cls eq groupings delims name_ppp (p, s, id : 'a u) : 'a t =
+let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
   { printer = (fun o x ->
       o opn ;
       p name_ppp false o x ;
@@ -618,10 +618,10 @@ let union opn cls eq groupings delims name_ppp (p, s, id : 'a u) : 'a t =
               | _ -> None))
           | _ -> None))
       | _ -> None) ;
-    descr = id }
+    descr }
 
 (* Combine two ppp into a pair of options *)
-let (|||) (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option * 'b option) u =
+let alternative var_sep (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option * 'b option) u =
   (fun name_ppp need_sep o (v1,v2) ->
     may (p1 name_ppp need_sep o) v1 ;
     let need_sep = need_sep || v1 <> None in
@@ -633,7 +633,7 @@ let (|||) (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option * 'b option) u 
       (match s2 n i o with
       | Some (x, o) -> Some ((None, Some x), o)
       | None -> None)),
-  (id1 ^" | "^ id2)
+  (id1 ^ var_sep ^ id2)
 
 let variant eq sep id_sep name (ppp : 'a t) : 'a u =
   (fun name_ppp need_sep o v ->
@@ -671,6 +671,7 @@ let none : unit t =
     first p1 +- sep ++ p2 +- sep ++ last p3 >>:
       ((fun (v1,v2,v3) -> (v1,v2),v3),
        (fun ((v1,v2),v3) -> v1,v2,v3))
+  let (|||) x y = alternative " | " x y
 
   let color : color t = union "" "" "" groupings delims identifier (
     variant " " "" " of " "RGB" (tuple3 int int int) |||
@@ -698,13 +699,13 @@ let none : unit t =
 exception MissingRequiredField
 
 (* When using union for building a record, aggregate the tree of pairs at
- * every field.  This merge hass to be recursive so we must build the merge
+ * every field.  This merge has to be recursive so we must build the merge
  * function as we build the total tree of pairs with <->. *)
 type 'a merge_u = 'a option -> 'a option -> 'a option
-let record opn cls eq sep groupings delims name_ppp ((p, s, id : 'a u), (merge : 'a merge_u)) =
+let record opn cls eq sep groupings delims name_ppp ((p, s, descr : 'a u), (merge : 'a merge_u)) =
   (* In a record we assume there are nothing special to open/close a single
    * field. If not, add 2 parameters in the record: *)
-  let nf = union "" "" eq groupings (cls::delims) name_ppp (p, s, id) in
+  let nf = union "" "" eq groupings (cls::delims) name_ppp (p, s, descr) in
   { printer = (fun o v ->
       o opn ;
       p name_ppp false o v ;
@@ -737,11 +738,11 @@ let record opn cls eq sep groupings delims name_ppp ((p, s, id : 'a u), (merge :
           | Some r -> Some (r, o + cls_len))
         | _ -> None)
       | _ -> None) ;
-    descr = opn ^ id ^ cls}
+    descr = opn ^ descr ^ cls}
 
 (* But then we need a special combinator to also compute the merge of the pairs of pairs... *)
-let (<->) ((psi1 : 'a u), (m1 : 'a merge_u)) ((psi2 : 'b u), (m2 : 'b merge_u)) : (('a option * 'b option) u * ('a option * 'b option) merge_u) =
-  (psi1 ||| psi2),
+let sequence field_sep ((psi1 : 'a u), (m1 : 'a merge_u)) ((psi2 : 'b u), (m2 : 'b merge_u)) : (('a option * 'b option) u * ('a option * 'b option) merge_u) =
+  (alternative field_sep psi1 psi2),
   (fun (v1 : ('a option * 'b option) option) (v2 : ('a option * 'b option) option) ->
     if v1 = None && v2 = None then None else
     Some (
@@ -751,8 +752,8 @@ let (<->) ((psi1 : 'a u), (m1 : 'a merge_u)) ((psi2 : 'b u), (m2 : 'b merge_u)) 
       m1 (map_get fst v1) (map_get fst v2),
       m2 (map_get snd v1) (map_get snd v2)))
 
-let field eq sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
-  (variant eq sep "" name ppp),
+let field eq sep id_sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
+  (variant eq sep id_sep name ppp),
   (fun r1 r2 ->
     if r2 = None then (
       if r1 = None then default else r1
@@ -760,12 +761,13 @@ let field eq sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
 
 (*$inject
   type person = { name: string ; age: int ; male: bool }
+  let (<->) x y = sequence "; " x y
 
   let person : person t =
     record "{" "}" "=" ";" groupings delims identifier (
-      field "=" "; " "name" string <->
-      field "=" "; " "age" int <->
-      field "=" "; " ~default:true "male" bool) >>:
+      field "=" "; " ": " "name" string <->
+      field "=" "; " ": " "age" int <->
+      field "=" "; " ": " ~default:true "male" bool) >>:
       ((fun { name ; age ; male } -> Some (Some name, Some age), Some male),
        (function (Some (Some name, Some age), Some male) -> { name ; age ; male }
                | _ -> raise MissingRequiredField))

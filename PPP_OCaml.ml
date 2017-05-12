@@ -93,11 +93,11 @@ let groupings = [ "{","}" ; "[","]" ; "(",")" ; "[|","|]" ; "begin","end" ]
 let delims = [ "," ; ";" ]
 
 let record x = PPP.record "{" "}" "=" ";" groupings delims identifier x
-let (<->) = PPP.(<->)
-let field ?default name x = PPP.field "=" "; " ?default name x
+let (<->) x y = PPP.sequence "; " x y
+let field ?default name x = PPP.field "=" "; " ": " ?default name x
 
 let union x = PPP.union "" "" "" groupings delims identifier x
-let (|||) = PPP.(|||)
+let (|||) x y = PPP.alternative " | " x y
 let variant name x = PPP.variant " " "" " of " name x
 
 let result ok_ppp err_ppp = union (
