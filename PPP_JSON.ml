@@ -7,6 +7,8 @@ let (++) = (++)
 let (-+) = (-+)
 let (+-) = (+-)
 let (>>:) = (>>:)
+let cst = cst
+let none = none
 
 let unit : unit t = cst "null"
 (*$= unit
