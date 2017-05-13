@@ -519,7 +519,9 @@ let debug = Printf.ifprintf (*Printf.fprintf*)
  * can read a sequence of identifier * anything, and deal with it.
  * Delims are used to know where the value ends. *)
 let rec skip_any groupings delims i o =
-  (* also handle strings *)
+  (* Here we only deal with a value up to next delimiter (or closing grouping),
+   * but if we encounter a group opening we switch to skip_group which will
+   * (recursively) skips as many values to reach the end of the group. *)
   let o = skip_blanks i o in
   let c = i o 1 in
   if c = "" then Some o
@@ -534,21 +536,21 @@ let rec skip_any groupings delims i o =
   ) else if List.exists (fun (_, cls) -> stream_starts_with i o cls) groupings then (
     debug stderr "skip_any: found the end of an enclosing group at %d\n%!" o ;
     Some o
-  ) else (
-    match List.find (fun (opn, _) ->
-      stream_starts_with i o opn) groupings with
+  ) else match List.find (fun (opn, _) -> stream_starts_with i o opn) groupings with
     | exception Not_found ->
       (* Not a group: this char is part of the value that we skip *)
       skip_any groupings delims i (o+1)
     | opn, cls ->
       debug stderr "skip_any: found a %S,%S group starting at %d\n%!" opn cls o ;
       skip_group cls groupings delims i (o + String.length opn)
-  )
+
+(* Like skip_any but skip a sequence of values, as far as closing the opened group: *)
 and skip_group cls groupings delims i o =
+  (* reads as many values and delimiters as to get out of that group. *)
   let clsl = String.length cls in
   let o = skip_blanks i o in
   if i o clsl = cls then Some (o + clsl) else
-  match skip_any groupings [cls] i o with
+  match skip_any groupings delims i o with
   | None -> None
   | Some o ->
     let o = skip_blanks i o in
@@ -628,7 +630,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
       and cls_len = String.length cls in
       (* There could be some grouping, skip it. *)
       let opened, o = skip_opened_groups groupings i o in
-      debug stderr "found %d opened gorups\n%!" (List.length opened) ;
+      debug stderr "found %d opened groups\n%!" (List.length opened) ;
       let o = skip_blanks i o in
       match i o opn_len with
       | str when str = opn ->

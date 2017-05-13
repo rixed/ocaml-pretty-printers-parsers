@@ -201,3 +201,18 @@ let option ppp = union (
    (Some (Bar ("bla", 42), 14)) (of_string string_first_ppp "Bar (\"bla\",42)" 0)
    (Some (Bar ("bla", 42), 17)) (of_string string_first_ppp "Bar ( \"bla\" , 42)" 0)
  *)
+(*$inject
+   type test_rec = { a : int ; b : string_first option }
+   let test_rec_ppp = PPP_OCaml.(record (
+       field "a" int <->
+       field "b" (option string_first_ppp)) >>:
+       ((function | { a; b } -> Some a, Some b),
+        (function | Some a, Some b -> { a ; b }
+                  | _ -> assert false)))
+ *)
+(*$= test_rec_ppp & ~printer:(printer_of_ppp test_rec_ppp)
+  (Some ({ a=42; b= Some (Bar("bla", 4)) }, 36)) \
+    (of_string test_rec_ppp "{ a = 42 ; b = Some (Bar(\"bla\",4)) }" 0)
+  (Some ({ a=42; b= Some (Bar("bla", 4)) }, 40)) \
+    (of_string test_rec_ppp "{ a = 42 ; b = ((Some (Bar(\"bla\",4)))) }" 0)
+ *)
