@@ -3,7 +3,7 @@ WARNS      = Ael-31-41-44-45-48
 override OCAMLOPTFLAGS += $(INCS) -w $(WARNS) -g -annot -I $(top_srcdir) -O2
 override OCAMLFLAGS    += $(INCS) -w $(WARNS) -g -annot -I $(top_srcdir)
 
-SOURCES = PPP.ml PPP_OCaml.ml PPP_JSON.ml
+SOURCES = PPP.ml PPP_OCaml.ml PPP_JSON.ml PPP_CSV.ml
 
 # Common rules
 .SUFFIXES: .ml .mli .cmo .cmi .cmx .cmxs .annot
@@ -59,6 +59,8 @@ INSTALLED = \
 	META PPP.cmxa PPP.cma PPP.a \
 	PPP.cmx PPP.cmi PPP.cmo \
 	PPP_OCaml.cmx PPP_OCaml.cmi PPP_OCaml.cmo \
+	PPP_JSON.cmx PPP_JSON.cmi PPP_JSON.cmo \
+	PPP_CSV.cmx PPP_CSV.cmi PPP_CSV.cmo \
 	ppx_ppp.opt
 
 install: $(INSTALLED)
