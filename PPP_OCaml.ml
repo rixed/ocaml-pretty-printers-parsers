@@ -139,12 +139,15 @@ let option ppp = union (
     (let ppp = option int in let s = Some 3 |> to_string ppp in of_string ppp s 0)
   (Some (None, 5)) \
     (let ppp = option int in let s = None   |> to_string ppp in of_string ppp s 0)
+  (Some (Some 42, 7)) (of_string (option int) "Some 42" 0)
+  (Some (Some 42, 9)) (of_string (option int) "Some (42)" 0)
  *)
 (*$= option & ~printer:(printer_of_ppp (option (option int)))
   (Some (Some None, 9)) (of_string (option (option int)) "Some None" 0)
   (Some (Some None, 11)) (of_string (option (option int)) "Some (None)" 0)
   (Some (Some None, 10)) (of_string (option (option int)) "Some(None)" 0)
   (Some (Some (Some 42), 14)) (of_string (option (option int)) "Some (Some 42)" 0)
+  (Some (Some (Some 42), 16)) (of_string (option (option int)) "Some (Some (42))" 0)
  *)
 
 (*$inject

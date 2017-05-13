@@ -561,16 +561,23 @@ and skip_group cls groupings i o =
 
 let debug = Printf.ifprintf (*Printf.fprintf*)
 
+let opened_group groupings i o =
+  let o = skip_blanks i o in
+  (* Look for a group opening at position o *)
+  match List.find (fun (opn, _) ->
+    i o (String.length opn) = opn) groupings with
+  | exception Not_found -> None
+  | opn, _ as group -> Some (group, (o + String.length opn))
+
 (* Swallow opened groups *)
 let skip_opened_groups groupings i o =
   let rec loop opened o =
     let o = skip_blanks i o in
     (* Look for a group opening at position o *)
-    match List.find (fun (opn, _) ->
-      i o (String.length opn) = opn) groupings with
-    | exception Not_found -> opened, o
-    | opn, _ as group ->
-      loop (group::opened) (o + String.length opn)
+    match opened_group groupings i o with
+    | None -> opened, o
+    | Some (group, o) ->
+      loop (group::opened) o
   in
   loop [] o
 
@@ -610,6 +617,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
       and cls_len = String.length cls in
       (* There could be some grouping, skip it. *)
       let opened, o = skip_opened_groups groupings i o in
+      debug stderr "found %d opened gorups\n%!" (List.length opened) ;
       let o = skip_blanks i o in
       match i o opn_len with
       | str when str = opn ->
@@ -631,24 +639,57 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
             (match skip_any groupings delims' i o' with
             | None -> None
             | Some o ->
-              (* If there was some grouping, then we must close all of
-               * them now *)
+              debug stderr "found value, up to o=%d (starting at %d)\n%!" o o' ;
+              (* If there was some opened grouping at the beginning, then we
+               * must find them closed now: *)
               (match skip_closed_groups opened i o with
               | None -> None
               | Some o ->
-                let o = skip_blanks i o in
+                debug stderr "found closed groupings\n%!" ;
+                let cls_pos = skip_blanks i o in
                 (* Check we have cls: *)
-                (match i o cls_len with
+                (match i cls_pos cls_len with
                 | str when str = cls ->
                   debug stderr "found cls %S\n%!" cls ;
-                  let value = chop_sub (i o' (o-o')) 0 (o-o') in
-                  let i = string_reader value in
-                  (match s name i 0 with
-                  | Some (v, _o') ->
-                    debug stderr "found value (%S) and parsed it.\n%!" value ;
-                    (* TODO: check o' *)
-                    Some (v, o + cls_len)
-                  | x -> x)
+                  let value = chop_sub (i o' (cls_pos - o')) 0 (cls_pos - o') in
+                  debug stderr "found value %S\n%!" value ;
+                  (* Here we have an issue. We may fail to parse the value in
+                   * case of extraneous groupings again. This is a bit annoying
+                   * since some parsers may depends on the groups to be present
+                   * (tuples...) so we cannot remove groups preemptively. We
+                   * have to try to parse again while removing the grouping
+                   * layers one by one. So for instance if we are given
+                   * (((1,2))) as a int pair, we must try first with 3, then 2
+                   * then 1 parentheses which will eventually succeed (0
+                   * parentheses would fail). *)
+                  let rec try_ungroup opened i o =
+                    (match s name i o with
+                    | Some (v, o) ->
+                      debug stderr "parsed value!\n%!" ;
+                      (* If we had to open some groups, check we can now close
+                       * them: *)
+                      (match skip_closed_groups opened i o with
+                      | None ->
+                        debug stderr "Cannot close %d opened groups around value %S" (List.length opened) value ;
+                        None
+                      | Some oo -> Some (v, oo))
+                    | None ->
+                      (match opened_group groupings i o with
+                      | None -> None
+                      | Some (group, o) ->
+                        try_ungroup (group::opened) i o)) in
+                  let ii = string_reader value in
+                  (match try_ungroup [] ii 0 with
+                  | None -> None
+                  | Some (v, oo) -> (* oo is the offset in the value only *)
+                      let oo = skip_blanks ii oo in
+                      (* We should have read everything *)
+                      if oo = String.length value then
+                          Some (v, cls_pos + cls_len)
+                      else (
+                        debug stderr "garbage at end of value %S from offset %d\n%!" value oo ;
+                        None
+                      ))
                 | _ -> None)))
           | _ -> None))
       | _ -> None) ;
