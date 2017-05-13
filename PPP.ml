@@ -559,7 +559,31 @@ and skip_group cls groupings i o =
   None (skip_any ["{","}" ; "(",")"] [" ";";"] (string_reader "{ a = 43 ; glop=1 ) ") 0)
  *)
 
-let debug = Printf.ifprintf
+let debug = Printf.ifprintf (*Printf.fprintf*)
+
+(* Swallow opened groups *)
+let skip_opened_groups groupings i o =
+  let rec loop opened o =
+    let o = skip_blanks i o in
+    (* Look for a group opening at position o *)
+    match List.find (fun (opn, _) ->
+      i o (String.length opn) = opn) groupings with
+    | exception Not_found -> opened, o
+    | opn, _ as group ->
+      loop (group::opened) (o + String.length opn)
+  in
+  loop [] o
+
+(* Swallow closing groups (previously opened) *)
+let skip_closed_groups opened i o =
+  let rec loop o = function
+    | [] -> Some o
+    | (_, cls)::rest ->
+      let o = skip_blanks i o in
+      let len = String.length cls in
+      if i o len <> cls then None else
+      loop (o + len) rest in
+  loop o opened
 
 (* Instead of a normal ppp, the printers used by union take
  * a optional value and prints only when it's set - with the idea
@@ -584,41 +608,48 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
     scanner = (fun i o ->
       let opn_len = String.length opn
       and cls_len = String.length cls in
+      (* There could be some grouping, skip it. *)
+      let opened, o = skip_opened_groups groupings i o in
       let o = skip_blanks i o in
       match i o opn_len with
       | str when str = opn ->
-        debug stderr "found union opn\n" ;
+        debug stderr "found union opn %S\n%!" opn ;
         let o = o + opn_len in
         (match name_ppp.scanner i o with
         | None -> None
         | Some (name, o') ->
-          debug stderr "found union name '%s'\n" name ;
+          debug stderr "found union name %S\n%!" name ;
           (* Now skip the eq sign *)
           let o' = skip_blanks i o' in
           let eq_len = String.length eq in
           (match i o' eq_len with
           | e when e = eq ->
-            debug stderr "found eq '%s'\n" eq ;
+            debug stderr "found eq %S\n%!" eq ;
             let o' = skip_blanks i (o' + eq_len) in
             (* Now the value *)
             let delims' = if cls_len > 0 then cls::delims else delims in
             (match skip_any groupings delims' i o' with
             | None -> None
             | Some o ->
-              let o = skip_blanks i o in
-              (* Check we have cls: *)
-              (match i o cls_len with
-              | str when str = cls ->
-                debug stderr "found cls '%s'\n" cls ;
-                let value = chop_sub (i o' (o-o')) 0 (o-o') in
-                let i = string_reader value in
-                (match s name i 0 with
-                | Some (v, _o') ->
-                  debug stderr "found value and parsed it.\n" ;
-                  (* TODO: check o' *)
-                  Some (v, o + cls_len)
-                | x -> x)
-              | _ -> None))
+              (* If there was some grouping, then we must close all of
+               * them now *)
+              (match skip_closed_groups opened i o with
+              | None -> None
+              | Some o ->
+                let o = skip_blanks i o in
+                (* Check we have cls: *)
+                (match i o cls_len with
+                | str when str = cls ->
+                  debug stderr "found cls %S\n%!" cls ;
+                  let value = chop_sub (i o' (o-o')) 0 (o-o') in
+                  let i = string_reader value in
+                  (match s name i 0 with
+                  | Some (v, _o') ->
+                    debug stderr "found value (%S) and parsed it.\n%!" value ;
+                    (* TODO: check o' *)
+                    Some (v, o + cls_len)
+                  | x -> x)
+                | _ -> None)))
           | _ -> None))
       | _ -> None) ;
     descr }
