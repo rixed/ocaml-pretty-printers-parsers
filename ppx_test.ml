@@ -7,7 +7,8 @@ module B = struct
 
   type t3 = { foo : int ; bar : bool ; recursive : t3 list [@ppp_ignore []] } [@@ppp PPP_OCaml]
 
-  type t4 = Foo of int | Bar of (string * int) | Baz [@@ppp PPP_OCaml]
+  type t4 = Foo of int | Bar of string * int | Baz [@@ppp PPP_OCaml]
+
 end
 
 type t5 = B.t4 option [@@ppp PPP_OCaml]

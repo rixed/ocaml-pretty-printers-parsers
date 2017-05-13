@@ -61,14 +61,26 @@ let exp_of_unit = exp_of_constr "()" None
 let exp_of_ppp_exception name =
   Exp.construct (loc_of Longident.(Ldot (Lident "PPP", name))) None
 
-let exp_of_name name =
-  Exp.ident (ident_of_name name)
+let exp_of_name x =
+  Exp.ident (ident_of_name x)
+
+let exp_of_n_names n x =
+  assert (n > 0) ;
+  if n = 1 then exp_of_name x else
+  Exp.tuple (List.init n (fun i ->
+    exp_of_name (x ^ string_of_int i)))
 
 let field_exp_of_name rec_name field_name =
   Exp.field (exp_of_name rec_name) (ident_of_name field_name)
 
 let pattern_of_var x =
   Pat.var (loc_of x)
+
+let pattern_of_n_vars n x =
+  assert (n > 0) ;
+  if n = 1 then pattern_of_var x else
+  Pat.tuple (List.init n (fun i ->
+    pattern_of_var (x ^ string_of_int i)))
 
 let pattern_of_constr name opt =
   Pat.construct (ident_of_name name) opt
@@ -300,7 +312,9 @@ let leftist_option_tree_mono_pattern variable_names =
   let some_of p = pattern_of_constr "Some" (Some p) in
   let some_of_var = function
     | None -> Pat.any (), true
-    | Some x -> some_of (pattern_of_var x), false in
+    | Some (nb_args, x) ->
+      some_of (if nb_args > 0 then pattern_of_n_vars nb_args x else Pat.any ()),
+      false in
   let rec loop first prev prev_is_any = function
     | [] -> prev
     | x::rest -> (* Some rest, Some x unless that's our first pair: rest, Some x *)
@@ -342,10 +356,10 @@ let leftist_option_tree_mono_expr nb_args var_with_value value =
     some_or_none 0 in
   loop 1 new_ new_is_none
 
-let construct_has_arguments constructor_decl =
+let construct_nb_args constructor_decl =
   match constructor_decl.pcd_args with
-  | Pcstr_tuple lst -> lst <> []
-  | Pcstr_record lst -> lst <> []
+  | Pcstr_tuple lst -> List.length lst
+  | Pcstr_record lst -> List.length lst
 
 let exp_of_constructor_arguments constructor_decls =
   let construct_has_record = function
@@ -358,13 +372,15 @@ let exp_of_constructor_arguments constructor_decls =
       (* Connect all the variants with ||| operator *)
       List.reduce (apply2 "|||"))
   ) (
-    let nb_args = List.length constructor_decls in
-    if nb_args = 1 then (
+    let nb_consts = List.length constructor_decls in
+    if nb_consts = 1 then (
       (* Special case: no need to go through a tuple of options, all we need
          is to get rid of the constructor or add it. *)
       let constructor_decl = List.hd constructor_decls in
       let constr_name = constructor_decl.pcd_name.Asttypes.txt in
-      let has_args = construct_has_arguments constructor_decl in
+      let nb_args = if construct_has_record constructor_decl then 1
+                    else construct_nb_args constructor_decl in
+      let has_args = nb_args > 0 in
       Exp.tuple [
         Exp.function_ [
           {
@@ -372,22 +388,22 @@ let exp_of_constructor_arguments constructor_decls =
 							(if construct_has_record constructor_decl then
                 pattern_of_var "x" else
               Pat.construct (ident_of_name constr_name)
-                (if has_args then Some (pattern_of_var "x") else None)) ;
+                (if has_args then Some (pattern_of_n_vars nb_args "x") else None)) ;
             pc_guard = None ;
-            pc_rhs = if has_args then exp_of_name "x" else failwith "not implemented"
+            pc_rhs = if has_args then exp_of_n_names nb_args "x" else failwith "not implemented"
           }] ;
         Exp.function_ [
           {
-            pc_lhs = if has_args then pattern_of_var "x" else failwith "not implemented" ;
+            pc_lhs = if has_args then pattern_of_n_vars nb_args "x" else failwith "not implemented" ;
             pc_guard = None ;
             pc_rhs =
 							if construct_has_record constructor_decl then
                 exp_of_name "x" else
               exp_of_constr constr_name
-                (if has_args then Some (exp_of_name "x") else None)
+                (if has_args then Some (exp_of_n_names nb_args "x") else None)
           }]]
     ) else (
-      assert (nb_args >= 2) ;
+      assert (nb_consts >= 2) ;
       (* Convert from/to the pair of pairs of options *)
       (* We need:
            function cstrs x -> left-ist tree of pairs of optional values
@@ -399,26 +415,30 @@ let exp_of_constructor_arguments constructor_decls =
       Exp.tuple [
         Exp.function_ (List.mapi (fun i constructor_decl ->
           let constr_name = constructor_decl.pcd_name.Asttypes.txt in
+          let nb_args = if construct_has_record constructor_decl then 1
+                        else construct_nb_args constructor_decl in
           {
             pc_lhs =
               pattern_of_constr constr_name
-                (if construct_has_arguments constructor_decl then
-                  Some (pattern_of_var "x") else None) ;
+                (if nb_args > 0 then
+                  Some (pattern_of_n_vars nb_args "x") else None) ;
             pc_guard = None ;
             pc_rhs =
               let my_value =
                 (* TODO: could we not do this systematically? *)
                 if construct_has_record constructor_decl then
                   exp_of_constr constr_name (Some (exp_of_name "x"))
-                else if construct_has_arguments constructor_decl then
-                  exp_of_name "x"
+                else if nb_args > 0 then
+                  exp_of_n_names nb_args "x"
                 else exp_of_unit in
-              leftist_option_tree_mono_expr nb_args i my_value
+              leftist_option_tree_mono_expr nb_consts i my_value
           }) constructor_decls) ;
         Exp.function_ ((List.mapi (fun i constructor_decl ->
           let constr_name = constructor_decl.pcd_name.Asttypes.txt in
+          let nb_args = if construct_has_record constructor_decl then 1
+                        else construct_nb_args constructor_decl in
           let patterned_vars = List.mapi (fun j constructor_decl ->
-              if j = i then Some "x" else None
+              if j = i then Some (nb_args, "x") else None
             ) constructor_decls in
           {
             pc_lhs = leftist_option_tree_mono_pattern patterned_vars ;
@@ -427,8 +447,8 @@ let exp_of_constructor_arguments constructor_decls =
               if construct_has_record constructor_decl then
                 exp_of_name "x"
               else exp_of_constr constr_name
-                (if construct_has_arguments constructor_decl then
-                   Some (exp_of_name "x") else None)
+                (if nb_args > 0 then
+                   Some (exp_of_n_names nb_args "x") else None)
           }) constructor_decls)) ]))
 
 let ppp_of_type_declaration tdec =
