@@ -1,6 +1,9 @@
 open PPP
-(*$inject open PPP *)
-(*$inject let id x = x *)
+(*$inject
+  let id x = x
+  let of_string = PPP.of_string
+  let to_string = PPP.to_string
+ *)
 
 (* Import the infix operators *)
 let (++) = (++)
@@ -19,6 +22,7 @@ let bool = bool
 let int = int
 let int32 = int32
 let int64 = int64
+let uint32 = uint32
 let float = float
 let string = PPP.string (* not really but let's pretend for now *)
 
@@ -35,7 +39,7 @@ let (<->) x y = PPP.sequence "; " x y
 let field ?default name x = PPP.field ":" ", " ": " ?default name x
 
 let union x = PPP.union "{" "}" ":" groupings delims string x
-let (|||) x y = PPP.alternative "; " x y
+let (|||) x y = PPP.alternative " | " x y
 let variant name x = PPP.variant ":" "" " of " name x
 
 let pair (p1 : 'a t) (p2 : 'b t) : ('a * 'b) t =

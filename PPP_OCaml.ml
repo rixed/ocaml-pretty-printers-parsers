@@ -24,6 +24,7 @@ let bool = bool
 let int = int
 let int32 = int32
 let int64 = int64
+let uint32 = uint32
 let float = float
 let string = string
 

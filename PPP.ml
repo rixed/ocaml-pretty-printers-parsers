@@ -373,6 +373,7 @@ let int32 : int32 t = int64 >>:
         raise IntegerOverflow
       else Int64.to_int32 n))
 
+type uint32 = int32
 let uint32 : int32 t = int64 >>:
   ((fun n -> Int64.of_int32 n),
    (fun n ->
