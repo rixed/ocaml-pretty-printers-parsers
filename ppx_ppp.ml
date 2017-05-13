@@ -6,10 +6,10 @@ open Ast_helper
 let exp_todo n =
   Exp.constant (Const.string ("TODO:"^n))
 
-let extract_attribute n attrs =
+let extract_ident_attribute n attrs =
   let rec loop prev = function
     | [] -> None
-    | ({ Asttypes.txt ; _ },
+    | ({ Asttypes.txt ; _ }, (* Match identifier (to get module name for @@ppp *)
        PStr [
          { pstr_desc =
              Pstr_eval ({
@@ -20,6 +20,18 @@ let extract_attribute n attrs =
            _ }
        ] )::rest when txt = n ->
       Some (ident, List.rev_append prev rest)
+    | x::rest ->
+      loop (x :: prev) rest in
+  loop [] attrs
+
+let extract_expr_attribute n attrs =
+  let rec loop prev = function
+    | [] -> None
+    | ({ Asttypes.txt ; _ }, (* Match expressions (to get default values *)
+       PStr [
+         { pstr_desc = Pstr_eval (exp, _) ; _ }
+       ] )::rest when txt = n ->
+      Some (exp, List.rev_append prev rest)
     | x::rest ->
       loop (x :: prev) rest in
   loop [] attrs
@@ -189,10 +201,23 @@ let field_exp_of_label_decl label_decl =
     (ppp_exp_of_core_type label_decl.pld_type)
 
 let exp_of_label_decls ?constr_name label_decls =
+  (* Some labels may be ignored: *)
+  let ignored_labels, not_ignored_labels =
+    List.fold_left (fun (ign, not_ign) label_decl ->
+        match extract_expr_attribute "ppp_ignore" label_decl.pld_attributes with
+        | None -> ign, (label_decl :: not_ign)
+        | Some attr -> ((label_decl, attr) :: ign), not_ign
+      ) ([], []) label_decls in
+  (* For sanity: *)
+  let ignored_labels = List.rev ignored_labels
+  and not_ignored_labels = List.rev not_ignored_labels in
+  let default_of_field (label_decl, (v, _)) =
+    ident_of_name label_decl.pld_name.Asttypes.txt,
+    v in
   apply2 ">>:" (
     apply1 "record" (
       (* For each field, emit a field expression *)
-      List.map field_exp_of_label_decl label_decls |>
+      List.map field_exp_of_label_decl not_ignored_labels |>
       (* Connect all the variants with ||| operator *)
       List.reduce (apply2 "<->"))
   ) (
@@ -207,11 +232,11 @@ let exp_of_label_decls ?constr_name label_decls =
       match constr_name with
       | None -> expr
       | Some cn -> exp_of_constr cn (Some expr) in
-    let nb_labels = List.length label_decls in
+    let nb_labels = List.length not_ignored_labels in
     if nb_labels = 1 then (
       (* Special case: no need to go through a tuple of options, all we need
          is to get rid of the label or add it. *)
-      let label_decl = List.hd label_decls in
+      let label_decl = List.hd not_ignored_labels in
       let label_name = label_decl.pld_name.Asttypes.txt in
       Exp.tuple [
         Exp.function_ [
@@ -224,10 +249,10 @@ let exp_of_label_decls ?constr_name label_decls =
           {
             pc_lhs = pattern_of_var "x" ;
             pc_guard = None ;
-            pc_rhs = maybe_constr_record (Exp.record [
-              ident_of_name label_name,
-              exp_of_name "x"
-            ] None (* ? *))
+            pc_rhs = maybe_constr_record (Exp.record (
+              (ident_of_name label_name, exp_of_name "x") ::
+              List.map default_of_field ignored_labels
+            ) None (* ? *))
           }]]
     ) else (
       assert (nb_labels >= 2) ;
@@ -236,17 +261,20 @@ let exp_of_label_decls ?constr_name label_decls =
           {
             pc_lhs = maybe_constr_pattern (pattern_of_var "x") ;
             pc_guard = None ;
-            pc_rhs = leftist_option_tree_all_expr label_decls
+            pc_rhs = leftist_option_tree_all_expr not_ignored_labels
           }] ;
         (* No support for default values (yet!) *)
         Exp.function_ ([
           {
             pc_lhs = leftist_option_tree_all_pattern nb_labels ;
             pc_guard = None ;
-            pc_rhs = maybe_constr_record (Exp.record (List.mapi (fun i label_decl ->
-                ident_of_name label_decl.pld_name.Asttypes.txt,
-                exp_of_name ("x"^ string_of_int i)
-              ) label_decls) None)
+            pc_rhs = maybe_constr_record (Exp.record (
+                  List.mapi (fun i label_decl ->
+                      ident_of_name label_decl.pld_name.Asttypes.txt,
+                      exp_of_name ("x"^ string_of_int i)
+                    ) not_ignored_labels @
+                  List.map default_of_field ignored_labels
+                ) None)
           }] @ [
             pattern_catch_all
               (apply1 "raise" (exp_of_ppp_exception "MissingRequiredField"))
@@ -404,7 +432,7 @@ let exp_of_constructor_arguments constructor_decls =
           }) constructor_decls)) ]))
 
 let ppp_of_type_declaration tdec =
-  match extract_attribute "ppp" tdec.ptype_attributes with
+  match extract_ident_attribute "ppp" tdec.ptype_attributes with
   | None -> (* don't care *)
     tdec, None
   | Some (var_module, attrs) ->
