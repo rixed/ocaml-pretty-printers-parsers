@@ -512,6 +512,8 @@ let stream_starts_with i o s =
   let str = i o l in
   str = s
 
+let debug = Printf.ifprintf (*Printf.fprintf*)
+
 (* To be able to "reorder" records fields we need a function able to tell us
  * the length of a value, without knowing its type. If we have this, then we
  * can read a sequence of identifier * anything, and deal with it.
@@ -521,32 +523,43 @@ let rec skip_any groupings delims i o =
   let o = skip_blanks i o in
   let c = i o 1 in
   if c = "" then Some o
-  else if c = "\"" then skip_string i (o+1)
-  else if List.exists (stream_starts_with i o) delims then Some o
+  else if c = "\"" then (
+    debug stderr "skip_any: found a string at %d, skipping it.\n%!" o ;
+    skip_string i (o+1)
+  ) else if List.exists (stream_starts_with i o) delims then (
+    debug stderr "skip_any: found a delimiter at %d\n%!" o ;
+    Some o
   (* Ok but this value can be itself in an outside group so group ends
    * must count as delimiters: *)
-  else if List.exists (fun (_, cls) -> stream_starts_with i o cls) groupings then Some o
-  else (
+  ) else if List.exists (fun (_, cls) -> stream_starts_with i o cls) groupings then (
+    debug stderr "skip_any: found the end of an enclosing group at %d\n%!" o ;
+    Some o
+  ) else (
     match List.find (fun (opn, _) ->
       stream_starts_with i o opn) groupings with
     | exception Not_found ->
       (* Not a group: this char is part of the value that we skip *)
       skip_any groupings delims i (o+1)
     | opn, cls ->
-      skip_group cls groupings i (o + String.length opn)
+      debug stderr "skip_any: found a %S,%S group starting at %d\n%!" opn cls o ;
+      skip_group cls groupings delims i (o + String.length opn)
   )
-and skip_group cls groupings i o =
+and skip_group cls groupings delims i o =
   let clsl = String.length cls in
   let o = skip_blanks i o in
   if i o clsl = cls then Some (o + clsl) else
   match skip_any groupings [cls] i o with
   | None -> None
-  | Some o' ->
-    let o'' = skip_blanks i o' in
-    let s = i o'' clsl in
-    if s = cls then (
-      Some (o'' + clsl)
-    ) else None
+  | Some o ->
+    let o = skip_blanks i o in
+    if i o clsl = cls then (
+      Some (o + clsl)
+    ) else match List.find (stream_starts_with i o) delims with
+      | exception Not_found -> None
+      | delim -> (* If we found a delim then we are not done yet *)
+        debug stderr "skip_any: found a delimiter at %d\n%!" o ;
+        let o = o + String.length delim in
+        skip_group cls groupings delims i o
 (*$= skip_any & ~printer:(function None -> "" | Some o -> string_of_int o)
   (Some 4) (skip_any [] [","] (string_reader "glop") 0)
   (Some 6) (skip_any ["(",")"] [] (string_reader "(glop)") 0)
@@ -558,8 +571,6 @@ and skip_group cls groupings i o =
   (Some 26) (skip_any ["{","}"] [";"] (string_reader "{ a = 43 ; glop=(1, 2 ); } ; z ") 0)
   None (skip_any ["{","}" ; "(",")"] [" ";";"] (string_reader "{ a = 43 ; glop=1 ) ") 0)
  *)
-
-let debug = Printf.ifprintf (*Printf.fprintf*)
 
 let opened_group groupings i o =
   let o = skip_blanks i o in

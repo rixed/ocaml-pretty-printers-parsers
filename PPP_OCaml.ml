@@ -187,3 +187,17 @@ let option ppp = union (
    (Some ([A], 3)) (of_string test_none_ppp "[A]" 0)
    (Some ([A; B], 6)) (of_string test_none_ppp "[A; B]" 0)
   *)
+
+  (* Some non-regression tests *)
+(*$inject
+   type string_first = Bar of string * int
+   let string_first_ppp = union (
+     variant "Bar" (pair string int)) >>:
+     ((function Bar (x,y) -> (x,y)),
+      (fun (x,y) -> Bar (x,y)))
+ *)
+(*$= string_first_ppp & ~printer:(printer_of_ppp string_first_ppp)
+   (Some (Bar ("bla", 42), 13)) (of_string string_first_ppp "Bar(\"bla\",42)" 0)
+   (Some (Bar ("bla", 42), 14)) (of_string string_first_ppp "Bar (\"bla\",42)" 0)
+   (Some (Bar ("bla", 42), 17)) (of_string string_first_ppp "Bar ( \"bla\" , 42)" 0)
+ *)
