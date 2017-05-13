@@ -128,7 +128,7 @@ let result ok_ppp err_ppp = union (
 
 let option ppp = union (
   variant "Some" ppp |||
-  variant "None" unit) >>:
+  variant "None" none) >>:
   ((function Some x -> Some x, None
            | None -> None, Some ()),
    (function Some x, _ -> Some x
@@ -137,6 +137,8 @@ let option ppp = union (
 (*$= option & ~printer:(printer_of_ppp (option int))
   (Some (Some 3, 6)) \
     (let ppp = option int in let s = Some 3 |> to_string ppp in of_string ppp s 0)
+  (Some (None, 5)) \
+    (let ppp = option int in let s = None   |> to_string ppp in of_string ppp s 0)
  *)
 
 (*$inject
