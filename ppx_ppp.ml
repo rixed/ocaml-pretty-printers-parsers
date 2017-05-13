@@ -64,11 +64,15 @@ let exp_of_ppp_exception name =
 let exp_of_name x =
   Exp.ident (ident_of_name x)
 
+let list_of_n_names n x =
+  assert (n > 0) ;
+  List.init n (fun i ->
+    exp_of_name (x ^ string_of_int i))
+
 let exp_of_n_names n x =
   assert (n > 0) ;
   if n = 1 then exp_of_name x else
-  Exp.tuple (List.init n (fun i ->
-    exp_of_name (x ^ string_of_int i)))
+  Exp.tuple (list_of_n_names n x)
 
 let field_exp_of_name rec_name field_name =
   Exp.field (exp_of_name rec_name) (ident_of_name field_name)
@@ -98,7 +102,7 @@ let name_of_ppp n = n ^"_ppp"
 let ppp_name_of_name = function
   | ("bool" | "int" | "int32" | "int64" | "float" |
      "string" | "unit" | "none" | "list" | "array" |
-     "option") as x -> x
+     "option" | "uint32" | "uint64") as x -> x
   | x -> name_of_ppp x
 
 let ppp_ident_of_ident = function
@@ -144,9 +148,24 @@ let rec ppp_exp_of_tuple core_types =
     ppp_exp_of_core_type core_type
   | core_type::rest ->
     let ppp = ppp_exp_of_core_type core_type in
-    apply "-+" [
-      apply "cst" [ exp_of_name "tuple_open" ] ;
-      add_type ppp rest ]
+    let tree =
+      apply "-+" [
+        apply "cst" [ exp_of_name "tuple_open" ] ;
+        add_type ppp rest ] in
+    let nb_types = List.length core_types in
+    assert (nb_types >= 2) ;
+    if nb_types = 2 then tree else
+    apply2 ">>:" tree (
+      (* We need to flatten that tree into a tuple *)
+      let tuple_pat = pattern_of_n_vars nb_types "x"
+      and tuple_exp = exp_of_n_names nb_types "x"
+      and tree_pat = leftist_tree_all_pattern ~options:false nb_types
+      and tree_exp = leftist_tree_all_expr ~options:false (list_of_n_names nb_types "x")
+      in
+      Exp.tuple [
+        Exp.fun_ Asttypes.Nolabel None tuple_pat tree_exp ;
+        Exp.fun_ Asttypes.Nolabel None tree_pat tuple_exp ]
+    )
   | [] ->
     exp_of_name "none"
 
@@ -173,9 +192,12 @@ and ppp_exp_of_core_type core_type =
     exp_todo "Some obscure core_type"
 
 (* returns a pattern with Some variable for each spot: *)
-let leftist_option_tree_all_pattern nb_vars =
-  let some_of p = pattern_of_constr "Some" (Some p) in
-  let some_of_var i = some_of (pattern_of_var ("x"^ string_of_int i)) in
+and leftist_tree_all_pattern ~options nb_vars =
+  let some_of p =
+    if options then pattern_of_constr "Some" (Some p)
+    else p in
+  let some_of_var i =
+    some_of (pattern_of_var ("x"^ string_of_int i)) in
   let rec loop first prev i =
     if i >= nb_vars then prev else (
       let prev = Pat.tuple [
@@ -189,21 +211,21 @@ let leftist_option_tree_all_pattern nb_vars =
   loop true prev 1
 
 (* Returns an leftist option tree expression made of record x labels *)
-let leftist_option_tree_all_expr label_decls =
-  let some_of p = exp_of_constr "Some" (Some p) in
-  let some_of_label label_decl =
-    some_of (field_exp_of_name "x" label_decl.pld_name.Asttypes.txt) in
+and leftist_tree_all_expr ~options exps =
+  let some_of exp =
+    if options then exp_of_constr "Some" (Some exp)
+    else exp in
   let rec loop first prev = function
     | [] -> prev
     | x::rest ->
       let prev = Exp.tuple [
         if first then prev else some_of prev ;
-        some_of_label x ] in
+        some_of x ] in
       loop false prev rest
   in
-  assert (label_decls <> []) ;
-  let prev = some_of_label (List.hd label_decls) in
-  loop true prev (List.tl label_decls)
+  assert (exps <> []) ;
+  let prev = some_of (List.hd exps) in
+  loop true prev (List.tl exps)
 
 let field_exp_of_label_decl label_decl =
   apply2 "field"
@@ -273,12 +295,16 @@ let exp_of_label_decls ?constr_name label_decls =
           {
             pc_lhs = maybe_constr_pattern (pattern_of_var "x") ;
             pc_guard = None ;
-            pc_rhs = leftist_option_tree_all_expr not_ignored_labels
+            pc_rhs =
+              leftist_tree_all_expr ~options:true
+                (List.map (fun label_decl ->
+                  field_exp_of_name "x" label_decl.pld_name.Asttypes.txt)
+                  not_ignored_labels)
           }] ;
         (* No support for default values (yet!) *)
         Exp.function_ ([
           {
-            pc_lhs = leftist_option_tree_all_pattern nb_labels ;
+            pc_lhs = leftist_tree_all_pattern ~options:true nb_labels ;
             pc_guard = None ;
             pc_rhs = maybe_constr_record (Exp.record (
                   List.mapi (fun i label_decl ->
