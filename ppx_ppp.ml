@@ -1,5 +1,4 @@
 (* Abandon all hope ye who enter here *)
-open Batteries
 open Parsetree
 open Ast_helper
 
@@ -64,9 +63,27 @@ let exp_of_ppp_exception name =
 let exp_of_name x =
   Exp.ident (ident_of_name x)
 
+let list_init n f =
+  let rec loop prev i =
+    if i >= n then List.rev prev else
+    loop (f i :: prev) (i + 1)
+  in
+  loop [] 0
+
+let list_reduce f lst =
+  let rec loop prev = function
+    | [] -> prev
+    | x::rest ->
+      loop (f prev x) rest
+  in
+  match lst with
+    | [] -> invalid_arg "list_reduce"
+    | [x] -> x
+    | x::rest -> loop x rest
+
 let list_of_n_names n x =
   assert (n > 0) ;
-  List.init n (fun i ->
+  list_init n (fun i ->
     exp_of_name (x ^ string_of_int i))
 
 let exp_of_n_names n x =
@@ -83,7 +100,7 @@ let pattern_of_var x =
 let pattern_of_n_vars n x =
   assert (n > 0) ;
   if n = 1 then pattern_of_var x else
-  Pat.tuple (List.init n (fun i ->
+  Pat.tuple (list_init n (fun i ->
     pattern_of_var (x ^ string_of_int i)))
 
 let pattern_of_constr name opt =
@@ -253,7 +270,7 @@ let exp_of_label_decls ?constr_name label_decls =
       (* For each field, emit a field expression *)
       List.map field_exp_of_label_decl not_ignored_labels |>
       (* Connect all the variants with ||| operator *)
-      List.reduce (apply2 "<->"))
+      list_reduce (apply2 "<->"))
   ) (
     (* When the record is part of a constructor we cannot pattern-match the record fields
      * as usual and have to include that constructor with the pattern ; effectively we do
@@ -396,7 +413,7 @@ let exp_of_constructor_arguments constructor_decls =
       (* For each constructor, emit a variant expression *)
       List.map variant_exp_of_constructor_decl constructor_decls |>
       (* Connect all the variants with ||| operator *)
-      List.reduce (apply2 "|||"))
+      list_reduce (apply2 "|||"))
   ) (
     let nb_consts = List.length constructor_decls in
     if nb_consts = 1 then (

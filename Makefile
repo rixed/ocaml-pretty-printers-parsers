@@ -31,7 +31,7 @@ PPP.cma: $(SOURCES:.ml=.cmo)
 # PPX
 
 ppx_ppp.opt: ppx_ppp.ml
-	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -w -27 -package batteries,compiler-libs,ppx_tools.metaquot -linkpkg $^ -o $@
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -w -27 -package compiler-libs,ppx_tools.metaquot -linkpkg $^ -o $@
 
 ppx_test.opt: PPP.cmxa ppx_ppp.opt ppx_test.ml
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -ppx ./ppx_ppp.opt -package "$(PACKAGES)" PPP.cmxa ppx_test.ml -o $@
