@@ -87,12 +87,13 @@ sig
                 descr : string }
   type uint32
 
-  val to_string : 'a t -> 'a -> string ct
+  (* Note that we want of/to_string to return/take direct values not promises *)
+  val to_string : 'a t -> 'a -> string
   val to_out_channel : 'a t -> output_chan -> 'a -> unit ct
   val to_stdout : 'a t -> 'a -> unit ct
   val to_stderr : 'a t -> 'a -> unit ct
 
-  val of_string : 'a t -> string -> int -> ('a * int) option ct
+  val of_string : 'a t -> string -> int -> ('a * int) option
   val of_in_channel : ?buf_capacity:int -> 'a t -> input_chan -> int -> ('a * int) option ct
   val of_stdin : ?buf_capacity:int -> 'a t -> int -> ('a * int) option ct
 
