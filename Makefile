@@ -77,8 +77,10 @@ INSTALLED = \
 	PPP_OCaml.cmx PPP_OCaml.cmi PPP_OCaml.cmo \
 	PPP_JSON.cmx PPP_JSON.cmi PPP_JSON.cmo \
 	PPP_CSV.cmx PPP_CSV.cmi PPP_CSV.cmo \
-	PPP_block.cmxa PPP_block.cma PPP_block.cmx PPP_block.cmi PPP_block.cmo \
-	PPP_lwt.cmxa PPP_lwt.cma PPP_lwt.cmx PPP_lwt.cmi PPP_lwt.cmo \
+	PPP_block.cmxa PPP_block.cma PPP_block.a \
+	PPP_block.cmx PPP_block.cmi PPP_block.cmo \
+	PPP_lwt.cmxa PPP_lwt.cma PPP_lwt.a \
+	PPP_lwt.cmx PPP_lwt.cmi PPP_lwt.cmo \
 	ppx_ppp.opt
 
 install: $(INSTALLED)
