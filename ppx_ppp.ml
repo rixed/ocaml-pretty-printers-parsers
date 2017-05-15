@@ -13,8 +13,7 @@ let extract_ident_attribute n attrs =
          { pstr_desc =
              Pstr_eval ({
                pexp_desc =
-                 Pexp_construct (
-                   { Asttypes.txt = Longident.Lident ident; _ }, _) ;
+                 Pexp_construct (ident, _) ;
                _ }, _) ;
            _ }
        ] )::rest when txt = n ->
@@ -119,7 +118,7 @@ let name_of_ppp n = n ^"_ppp"
 let ppp_name_of_name = function
   | ("bool" | "int" | "int32" | "int64" | "float" |
      "string" | "unit" | "none" | "list" | "array" |
-     "option" | "uint32" | "uint64") as x -> x
+     "option" | "uint32") as x -> x
   | x -> name_of_ppp x
 
 let ppp_ident_of_ident = function
@@ -498,9 +497,8 @@ let ppp_of_type_declaration tdec =
   match extract_ident_attribute "ppp" tdec.ptype_attributes with
   | None -> (* don't care *)
     tdec, None
-  | Some (var_module, attrs) ->
+  | Some (impl_mod, attrs) ->
     let replacement = { tdec with ptype_attributes = attrs } in
-    let impl_mod = ident_of_name var_module in
     replacement, (match tdec.ptype_manifest with
     | None ->
       (match tdec.ptype_kind with
