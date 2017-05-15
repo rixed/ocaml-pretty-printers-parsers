@@ -273,7 +273,7 @@ let (++) ppp1 ppp2 =
       | None -> None
       | Some (v1, o) ->
         ppp2.scanner i o |> map (fun (v2, o) -> (v1, v2), o)) ;
-    descr = ppp1.descr ^" followed by "^ ppp2.descr }
+    descr = ppp1.descr ^ ppp2.descr }
 
 let (-+) ppp1 ppp2 =
   { printer = (fun o v2 ->
@@ -283,7 +283,7 @@ let (-+) ppp1 ppp2 =
       match ppp1.scanner i o with
       | None -> None
       | Some ((), o) -> ppp2.scanner i o) ;
-    descr = ppp1.descr ^" followed by "^ ppp2.descr }
+    descr = ppp1.descr ^ ppp2.descr }
 
 let (+-) ppp1 ppp2 =
   { printer = (fun o v1 ->
@@ -294,7 +294,7 @@ let (+-) ppp1 ppp2 =
       | None -> None
       | Some (v, o) ->
         ppp2.scanner i o |> map (fun (_, o) -> v, o)) ;
-    descr = ppp1.descr ^" followed by "^ ppp2.descr }
+    descr = ppp1.descr ^ ppp2.descr }
 
 let (--) ppp1 ppp2 =
   { printer = (fun o _ ->
@@ -305,7 +305,7 @@ let (--) ppp1 ppp2 =
       | None -> None
       | Some ((), o) ->
         ppp2.scanner i o |> map (fun (_, o) -> (), o)) ;
-    descr = ppp1.descr ^" followed by "^ ppp2.descr }
+    descr = ppp1.descr ^ ppp2.descr }
 
 let (>>:) ppp (f,f') =
   { printer = (fun o v -> ppp.printer o (f v)) ;
@@ -733,7 +733,7 @@ let variant eq sep id_sep name (ppp : 'a t) : 'a u =
   (fun n i o ->
     if n <> name then None
     else ppp.scanner i o),
-  (name ^ id_sep ^ ppp.descr)
+  (if ppp.descr = "" then name else name ^ id_sep ^ ppp.descr)
 
 (* Like unit but with no representation, useful for
  * constructor without arguments *)
