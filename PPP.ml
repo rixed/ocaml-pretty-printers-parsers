@@ -121,7 +121,7 @@ sig
     val array : 'a t -> 'a array t
     val unit : unit t
     val none : unit t
-    val option : 'a t -> 'a option t
+    val option : ?placeholder:('b t) -> 'a t -> 'a option t
   end
 
   val default : 'a -> 'a t -> 'a t
@@ -615,16 +615,27 @@ struct
     (Some (-0.00010348413604, 17)) (of_string float "-0.00010348413604" 0)
    *)
 
-  let option ppp =
+  let option ?placeholder ppp =
     { printer = (fun o -> function None -> return () | Some x -> ppp.printer o x) ;
       scanner = (fun i o ->
         bind (ppp.scanner i o) (function
           | Some (x, o') -> return (Some (Some x, o'))
-          | None -> return (Some (None, o)))) ;
-      descr = "optional "^ ppp.descr }
+          | None ->
+            (match placeholder with
+            | None -> return (Some (None, o))
+            | Some p ->
+              bind (p.scanner i o) (function
+                | Some (_, o') -> return (Some (None, o'))
+                | None -> return None)))) ;
+      descr = match placeholder with
+              | None -> "optional "^ ppp.descr
+              | Some p -> ppp.descr ^" or "^ p.descr }
   (*$= option & ~printer:(function None -> "" | Some (None, _) -> Printf.sprintf "none" | Some (Some d, o) -> Printf.sprintf "(%d, %d)" d o)
     (Some (Some 42,4)) (of_string (option (cst "{" -+ int +- cst "}")) "{42}" 0)
-    (Some (None,0)) (of_string (option (cst "{" -+ int +- cst "}")) "pas glop" 0)
+    (Some (None,0))    (of_string (option (cst "{" -+ int +- cst "}")) "pas glop" 0)
+    (Some (Some 42,4)) (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "{42}" 0)
+    (Some (None,4))    (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "nope" 0)
+    None               (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "pas glop" 0)
    *)
 
   let default v ppp =
