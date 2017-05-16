@@ -1,3 +1,5 @@
+open Stdint
+
 exception NotImplemented
 exception CannotBacktrackThatFar
 exception IntegerOverflow
@@ -85,8 +87,6 @@ sig
   type 'a t = { printer : 'a printer ;
                 scanner : 'a scanner ;
                 descr : string }
-  type uint32
-
   (* Note that we want of/to_string to return/take direct values not promises *)
   val to_string : 'a t -> 'a -> string
   val to_out_channel : 'a t -> output_chan -> 'a -> unit ct
@@ -114,8 +114,11 @@ sig
     val bool : bool t
     val int : int t
     val int32 : int32 t
+    val uint32 : uint32 t
     val int64 : int64 t
-    val uint32 : int32 t
+    val uint64 : uint64 t
+    val int128 : int128 t
+    val uint128 : uint128 t
     val float : float t
     val list : 'a t -> 'a list t
     val array : 'a t -> 'a array t
@@ -145,10 +148,7 @@ sig
   val newline : unit t
 end
 
-module Make (Conf : IO_CONFIG) (*:
-  S with type 'a ct = 'a Conf.ct
-     and type input_chan = Conf.input_chan
-     and type output_chan = Conf.output_chan *) =
+module Make (Conf : IO_CONFIG) =
 struct
   (*$inject
     module P = PPP_block.P *)
@@ -507,8 +507,8 @@ struct
   (* Int syntax is generic enough: *)
   (* General format: [sign] digits *)
   type int_part = IntStart | Int
-  let int64 : int64 t =
-    { printer = (fun o v -> o (Int64.to_string v)) ;
+  let int128 : int128 t =
+    { printer = (fun o v -> o (Int128.to_string v)) ;
       scanner = (fun i o ->
         let rec loop o oo s n part =
           bind (i o 1) (fun chr ->
@@ -516,31 +516,46 @@ struct
             | IntStart, "+" -> loop (o+1) oo s n Int
             | IntStart, "-" -> loop (o+1) oo (~- s) n Int
             | (IntStart|Int), d when str_is_digit d ->
-              let d = Int64.of_int (digit_of d) in
-              if n >= Int64.(sub 922337203685477580L d) then
-                raise IntegerOverflow ;
-              loop (o+1) (o+1) s Int64.(add (mul n 10L) d) Int
+              let d = Int128.of_int (digit_of d) in
+              loop (o+1) (o+1) s Int128.(add (mul n (of_int 10)) d) Int
             | _ -> return (oo, s, n))
         in
-        bind (loop o o 1 0L IntStart) (fun (oo, s, n) ->
-          let n = if s < 0 then Int64.neg n else n in
+        bind (loop o o 1 Int128.zero IntStart) (fun (oo, s, n) ->
+          let n = if s < 0 then Int128.neg n else n in
           if oo > o then return (Some (n, oo)) else return None)) ;
       descr = "integer" }
 
-  let int32 : int32 t = int64 >>:
-    ((fun n -> Int64.of_int32 n),
-     (fun n ->
-        if n >= 2147483648L || n < -2147483648L then
-          raise IntegerOverflow
-        else Int64.to_int32 n))
+  let uint128 : uint128 t =
+    { printer = (fun o v -> o (Uint128.to_string v)) ;
+      scanner = (fun i o ->
+        let rec loop o oo n part =
+          bind (i o 1) (fun chr ->
+            match part, chr with
+            | IntStart, "+" -> loop (o+1) oo n Int
+            | (IntStart|Int), d when str_is_digit d ->
+              let d = Uint128.of_int (digit_of d) in
+              loop (o+1) (o+1) Uint128.(add (mul n (of_int 10)) d) Int
+            | _ -> return (oo, n))
+        in
+        bind (loop o o Uint128.zero IntStart) (fun (oo, n) ->
+          if oo > o then return (Some (n, oo)) else return None)) ;
+      descr = "integer" }
 
-  type uint32 = int32
-  let uint32 : int32 t = int64 >>:
-    ((fun n -> Int64.of_int32 n),
-     (fun n ->
-        if n >= 4294967296L || n < 0L then
-          raise IntegerOverflow
-        else Int64.to_int32 n))
+  let int64 : int64 t = int128 >>:
+    ((fun n -> Int128.of_int64 n),
+     (fun n -> Int128.to_int64 n))
+
+  let uint64 : uint64 t = uint128 >>:
+    ((fun n -> Uint128.of_uint64 n),
+     (fun n -> Uint128.to_uint64 n))
+
+  let int32 : int32 t = int128 >>:
+    ((fun n -> Int128.of_int32 n),
+     (fun n -> Int128.to_int32 n))
+
+  let uint32 : uint32 t = uint128 >>:
+    ((fun n -> Uint128.of_uint32 n),
+     (fun n -> Uint128.to_uint32 n))
 
   let max_int_L = Int64.of_int max_int
   let min_int_L = Int64.of_int min_int
@@ -1048,8 +1063,11 @@ struct
     let bool = bool
     let int = int
     let int32 = int32
-    let int64 = int64
     let uint32 = uint32
+    let int64 = int64
+    let uint64 = uint64
+    let int128 = int128
+    let uint128 = uint128
     let float = float
     let list ppp = seq "list" "(" ")" ";" List.fold_left List.rev ppp
     let array ppp = seq "array" "(" ")" ";" Array.fold_left (fun l -> Array.of_list (List.rev l)) ppp

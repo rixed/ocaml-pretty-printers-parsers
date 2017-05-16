@@ -10,7 +10,7 @@ SOURCES = $(PPP_SOURCES) PPP_block.ml PPP_lwt.ml
 .SUFFIXES: .ml .mli .cmo .cmi .cmx .cmxs .annot
 .PHONY: clean distclean all check dep install uninstall reinstall
 
-PACKAGES = lwt.unix
+PACKAGES = lwt.unix stdint
 
 all: .depend \
      PPP_block.cmxa PPP_block.cma \
@@ -47,10 +47,13 @@ PPP_lwt.cma: PPP_lwt.cmo
 # PPX
 
 ppx_ppp.opt: ppx_ppp.ml
-	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -w -27 -package compiler-libs,ppx_tools.metaquot -linkpkg $^ -o $@
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -w -27 -linkpkg -package compiler-libs,ppx_tools,stdint $^ -o $@
 
-ppx_test.opt: PPP.cmxa PPP_block.cmxa ppx_ppp.opt ppx_test.ml
-	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -ppx ./ppx_ppp.opt -package "$(PACKAGES)" PPP.cmxa PPP_block.cmxa ppx_test.ml -o $@
+ppx_test.cmx: PPP.cmxa PPP_block.cmxa ppx_ppp.opt ppx_test.ml
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -package stdint -ppx ./ppx_ppp.opt PPP.cmxa PPP_block.cmxa -c ppx_test.ml -o $@
+
+ppx_test.opt: PPP.cmxa PPP_block.cmxa ppx_test.cmx
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -linkpkg -package stdint PPP.cmxa PPP_block.cmxa ppx_test.cmx -o $@
 
 clean:
 	$(RM) *.cm[iox] *.cmxs *.a *.s *.o .depend *.annot all_tests.*
