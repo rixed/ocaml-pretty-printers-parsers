@@ -99,6 +99,7 @@ sig
 
   val identifier : string t
   val until : string -> reader -> int -> int option ct
+  val until_any : string list -> reader -> int -> int option ct
   val next_word : (char -> bool) -> reader -> int -> (string * int) option ct
   val next_int : reader -> int -> (int * int) option ct
   val seq : string -> string -> string -> string -> ((int ct -> 'a -> int ct) -> int ct -> 'b -> 'c ct) -> ('a list -> 'b) -> 'a t -> 'b t
@@ -369,6 +370,21 @@ struct
       if String.length s < l then return None else
       if s <> u then until u i (o + 1) else
       return (Some o))
+
+  let until_any us i o =
+    let mi, ma =
+      List.fold_left (fun (mi, ma) u ->
+        min mi (String.length u),
+        max ma (String.length u)) (max_int, min_int) us in
+    let rec loop o =
+      bind (i o ma) (fun s ->
+        if List.exists (fun u -> starts_with u s) us then
+          return (Some o)
+        else if String.length s < mi then
+          return None
+        else loop (o + 1))
+    in
+    loop o
 
   let next_word is_word i o =
     let rec skip_word o =
