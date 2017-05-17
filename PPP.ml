@@ -48,6 +48,7 @@ let string_of lst len =
 
 let starts_with pref str =
   let len = String.length pref in
+  if String.length pref > len then false else
   try (
     for i = 0 to len-1 do
       if pref.[i] <> str.[i] then raise Exit
@@ -250,11 +251,12 @@ let rec until u i o =
 let until_any us i o =
   let mi, ma =
     List.fold_left (fun (mi, ma) u ->
-      min mi (String.length u),
-      max ma (String.length u)) (max_int, min_int) us in
+      let l = String.length u in
+      min mi l, max ma l) (max_int, min_int) us in
   let rec loop o =
     let s = i o ma in
-      if List.exists (fun u -> starts_with u s) us then Some o else
+      if String.length s >= mi &&
+         List.exists (fun u -> starts_with u s) us then Some o else
       if String.length s < mi then None else
       loop (o + 1)
   in
