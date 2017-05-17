@@ -398,62 +398,55 @@ let bool : bool t =
 (* Int syntax is generic enough: *)
 (* General format: [sign] digits *)
 type int_part = IntStart | Int
+
+let generic_int_scanner of_int add mul zero neg i o =
+  let rec loop o oo s n part =
+    match part, i o 1 with
+    | IntStart, "+" -> loop (o+1) oo s n Int
+    | IntStart, "-" -> loop (o+1) oo (~- s) n Int
+    | (IntStart|Int), d when str_is_digit d ->
+        let d = of_int (digit_of d) in
+        loop (o+1) (o+1) s (add (mul n (of_int 10)) d) Int
+    | _ -> oo, s, n
+  in
+  let oo, s, n = loop o o 1 zero IntStart in
+  let n = if s < 0 then neg n else n in
+  if oo > o then Some (n, oo) else None
+
 let int128 : int128 t =
   { printer = (fun o v -> o (Int128.to_string v)) ;
-    scanner = (fun i o ->
-      let rec loop o oo s n part =
-        match part, i o 1 with
-        | IntStart, "+" -> loop (o+1) oo s n Int
-        | IntStart, "-" -> loop (o+1) oo (~- s) n Int
-        | (IntStart|Int), d when str_is_digit d ->
-            let d = Int128.of_int (digit_of d) in
-            loop (o+1) (o+1) s Int128.(add (mul n (of_int 10)) d) Int
-        | _ -> oo, s, n
-      in
-      let oo, s, n = loop o o 1 Int128.zero IntStart in
-      let n = if s < 0 then Int128.neg n else n in
-      if oo > o then Some (n, oo) else None) ;
-    descr = "integer" }
+    scanner = (let open Int128 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "int128" }
 
 let uint128 : uint128 t =
   { printer = (fun o v -> o (Uint128.to_string v)) ;
-    scanner = (fun i o ->
-      let rec loop o oo n part =
-        match part, i o 1 with
-        | IntStart, "+" -> loop (o+1) oo n Int
-        | (IntStart|Int), d when str_is_digit d ->
-            let d = Uint128.of_int (digit_of d) in
-            loop (o+1) (o+1) Uint128.(add (mul n (of_int 10)) d) Int
-        | _ -> oo, n
-      in
-      let oo, n = loop o o Uint128.zero IntStart in
-      if oo > o then Some (n, oo) else None) ;
-    descr = "integer" }
+    scanner = (let open Uint128 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "uint128" }
 
-let int64 : int64 t = int128 >>:
-  ((fun n -> Int128.of_int64 n),
-   (fun n -> Int128.to_int64 n))
+let int64 : int64 t =
+  { printer = (fun o v -> o (Int64.to_string v)) ;
+    scanner = (let open Int64 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "int64" }
 
-let uint64 : uint64 t = uint128 >>:
-  ((fun n -> Uint128.of_uint64 n),
-   (fun n -> Uint128.to_uint64 n))
+let uint64 : uint64 t =
+  { printer = (fun o v -> o (Uint64.to_string v)) ;
+    scanner = (let open Uint64 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "uint64" }
 
-let int32 : int32 t = int128 >>:
-  ((fun n -> Int128.of_int32 n),
-   (fun n -> Int128.to_int32 n))
+let int32 : int32 t =
+  { printer = (fun o v -> o (Int32.to_string v)) ;
+    scanner = (let open Int32 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "int32" }
 
-let uint32 : uint32 t = uint128 >>:
-  ((fun n -> Uint128.of_uint32 n),
-   (fun n -> Uint128.to_uint32 n))
+let uint32 : uint32 t =
+  { printer = (fun o v -> o (Uint32.to_string v)) ;
+    scanner = (let open Uint32 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "uint32" }
 
-let max_int_L = Int64.of_int max_int
-let min_int_L = Int64.of_int min_int
-let int : int t = int64 >>:
-  ((fun n -> Int64.of_int n),
-   (fun n ->
-      if n > max_int_L || n < min_int_L then
-        raise IntegerOverflow
-      else Int64.to_int n))
+let int : int t =
+  { printer = (fun o v -> o (string_of_int v)) ;
+    scanner = generic_int_scanner (fun x:int -> x) (+) ( * ) 0 (~-) ;
+    descr = "int" }
 (*$= int & ~printer:id
   "42" (to_string int 42)
   "-42" (to_string int (-42))
