@@ -4,17 +4,15 @@ override OCAMLOPTFLAGS += $(INCS) -w $(WARNS) -g -annot -I $(top_srcdir) -O2
 override OCAMLFLAGS    += $(INCS) -w $(WARNS) -g -annot -I $(top_srcdir)
 
 PPP_SOURCES = PPP.ml PPP_OCaml.ml PPP_JSON.ml PPP_CSV.ml
-SOURCES = $(PPP_SOURCES) PPP_block.ml PPP_lwt.ml
+SOURCES = $(PPP_SOURCES)
 
 # Common rules
 .SUFFIXES: .ml .mli .cmo .cmi .cmx .cmxs .annot
 .PHONY: clean distclean all check dep install uninstall reinstall
 
-PACKAGES = lwt.unix stdint
+PACKAGES = stdint
 
 all: .depend \
-     PPP_block.cmxa PPP_block.cma \
-		 PPP_lwt.cmxa PPP_lwt.cma \
 		 ppx_ppp.opt ppx_test.opt
 
 %.cmo %.annot: %.ml
@@ -32,28 +30,16 @@ PPP.cmxa: $(PPP_SOURCES:.ml=.cmx)
 PPP.cma: $(PPP_SOURCES:.ml=.cmo)
 	ocamlfind ocamlc   $(OCAMLFLAGS) -a -linkpkg -package "$(PACKAGES)" -custom $^ -o $@
 
-PPP_block.cmxa: PPP_block.cmx
-	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -a -package "$(PACKAGES)" $^ -o $@
-
-PPP_block.cma: PPP_block.cmo
-	ocamlfind ocamlc   $(OCAMLFLAGS) -a -linkpkg -package "$(PACKAGES)" -custom $^ -o $@
-
-PPP_lwt.cmxa: PPP_lwt.cmx
-	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -a -package "$(PACKAGES)" $^ -o $@
-
-PPP_lwt.cma: PPP_lwt.cmo
-	ocamlfind ocamlc   $(OCAMLFLAGS) -a -linkpkg -package "$(PACKAGES)" -custom $^ -o $@
-
 # PPX
 
 ppx_ppp.opt: ppx_ppp.ml
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -w -27 -linkpkg -package compiler-libs,ppx_tools,stdint $^ -o $@
 
-ppx_test.cmx: PPP.cmxa PPP_block.cmxa ppx_ppp.opt ppx_test.ml
-	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -package stdint -ppx ./ppx_ppp.opt PPP.cmxa PPP_block.cmxa -c ppx_test.ml -o $@
+ppx_test.cmx: PPP.cmxa ppx_ppp.opt ppx_test.ml
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -package stdint -ppx ./ppx_ppp.opt PPP.cmxa -c ppx_test.ml -o $@
 
-ppx_test.opt: PPP.cmxa PPP_block.cmxa ppx_test.cmx
-	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -linkpkg -package stdint PPP.cmxa PPP_block.cmxa ppx_test.cmx -o $@
+ppx_test.opt: PPP.cmxa ppx_test.cmx
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -linkpkg -package stdint PPP.cmxa ppx_test.cmx -o $@
 
 clean:
 	$(RM) *.cm[iox] *.cmxs *.a *.s *.o .depend *.annot all_tests.*
@@ -80,10 +66,6 @@ INSTALLED = \
 	PPP_OCaml.cmx PPP_OCaml.cmi PPP_OCaml.cmo \
 	PPP_JSON.cmx PPP_JSON.cmi PPP_JSON.cmo \
 	PPP_CSV.cmx PPP_CSV.cmi PPP_CSV.cmo \
-	PPP_block.cmxa PPP_block.cma PPP_block.a \
-	PPP_block.cmx PPP_block.cmi PPP_block.cmo \
-	PPP_lwt.cmxa PPP_lwt.cma PPP_lwt.a \
-	PPP_lwt.cmx PPP_lwt.cmi PPP_lwt.cmo \
 	ppx_ppp.opt
 
 install: $(INSTALLED)

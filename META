@@ -1,23 +1,6 @@
 description = "Pretty-Printers/Parsers"
 version = "0.1"
-
-package "common" (
-  archive(byte) = "PPP.cma"
-  archive(native) = "PPP.cmxa"
-  ppx = "./ppx_ppp.opt"
-  requires = "stdint"
-)
-
-# I/Os are conventional blocking reads/writes
-package "block" (
-  archive(byte) = "PPP_block.cma"
-  archive(native) = "PPP_block.cmxa"
-  requires = "ppp.common"
-)
-
-# I/Os are using Lwt_io.
-package "lwt" (
-  archive(byte) = "PPP_lwt.cma"
-  archive(native) = "PPP_lwt.cmxa"
-  requires = "ppp.common lwt.unix"
-)
+archive(byte) = "PPP.cma"
+archive(native) = "PPP.cmxa"
+ppx = "./ppx_ppp.opt"
+requires = "stdint"
