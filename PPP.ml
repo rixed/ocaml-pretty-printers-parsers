@@ -62,10 +62,6 @@ let stream_starts_with i o s =
 
 let may f = function None -> () | Some x -> f x
 
-let read_or_zero ic buf ofs len =
-  try really_input ic buf ofs len ; len
-  with End_of_file -> 0
-
 type writer = string -> unit
 type reader = int -> int -> string
 type 'a printer = writer -> 'a -> unit
@@ -97,7 +93,7 @@ let of_string ppp s =
 
 (* We want to allow non-seekable channels therefore we must keep a short
  * past-buffer in case the scanners wants to rollback a bit: *)
-let of_in_channel ?(buf_capacity=4096) ppp ic =
+let of_non_seekable_in_channel ?(buf_capacity=4096) ppp ic =
   let buf = Bytes.create buf_capacity
   and buf_length = ref 0
   and buf_offset = ref 0 (* offset in ic of the first byte of buf *) in
@@ -121,6 +117,9 @@ let of_in_channel ?(buf_capacity=4096) ppp ic =
           buf_length := !buf_length - drop ;
           keep
         ) in
+      let read_or_zero ic buf ofs len =
+        try really_input ic buf ofs len ; len
+        with End_of_file -> 0 in
       let read_len = read_or_zero ic buf read_into to_read in
       buf_length := !buf_length + read_len ;
       (* Printf.eprintf "Buffer: length=%d, offset=%d, content=%S\n%!"
@@ -136,9 +135,34 @@ let of_in_channel ?(buf_capacity=4096) ppp ic =
   in
   ppp.scanner reader
 
-let of_stdin ?buf_capacity ppp = of_in_channel ?buf_capacity ppp stdin
+let of_seekable_in_channel ppp ic =
+  let cur_offset = ref 0 in
+  let reader o l =
+    if o <> !cur_offset then (
+      assert (o < !cur_offset) ;
+      assert (o >= 0) ;
+      seek_in ic o ;
+      cur_offset := o
+    ) ;
+    let read_or_zero ic len =
+      try really_input_string ic len
+      with End_of_file ->
+        (* FIXME: of course in case of short read we'd prefer to have what
+         * can be read. Use only input and handle retryable short reads :( *)
+        "" in
+    read_or_zero ic l
+  in
+  ppp.scanner reader
 
-(* TODO: of_seekable_in_channel *)
+let of_in_channel ?buf_capacity ppp ic =
+  (* If this is not seekable then we will need a buffer: *)
+  match seek_in ic 0 with
+  | exception _ ->
+    of_non_seekable_in_channel ?buf_capacity ppp ic
+  | _ ->
+    of_seekable_in_channel ppp ic
+
+let of_stdin ?buf_capacity ppp = of_in_channel ?buf_capacity ppp stdin
 
 let next_eq w i o =
   if stream_starts_with i o w then true, o + String.length w
