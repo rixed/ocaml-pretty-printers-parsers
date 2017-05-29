@@ -536,7 +536,10 @@ let float : float t =
  *)
 
 let option ?placeholder ppp =
-  { printer = (fun o -> function None -> () | Some x -> ppp.printer o x) ;
+  { printer = (fun o -> function None -> (match placeholder with
+                                          | None -> ()
+                                          | Some p -> p.printer o ())
+                               | Some x -> ppp.printer o x) ;
     scanner = (fun i o ->
       match ppp.scanner i o with
       | Some (x, o') -> Some (Some x, o')
