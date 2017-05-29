@@ -91,6 +91,19 @@ let string_reader s o l =
 let of_string ppp s =
   ppp.scanner (string_reader s)
 
+exception ParseError (* TODO: an error message would be useful *)
+let of_string_exc ppp s =
+  match of_string ppp s 0 with
+  | None -> raise ParseError
+  | Some (_, l) when l < String.length s -> raise ParseError
+  | Some (x, _) -> x
+
+let of_string_res ppp s =
+  match of_string ppp s 0 with
+  | None -> Error ()
+  | Some (_, l) when l < String.length s -> Error ()
+  | Some (x, _) -> Ok x
+
 (* We want to allow non-seekable channels therefore we must keep a short
  * past-buffer in case the scanners wants to rollback a bit: *)
 let of_non_seekable_in_channel ?(buf_capacity=4096) ppp ic =
