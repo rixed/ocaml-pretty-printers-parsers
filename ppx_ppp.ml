@@ -111,7 +111,7 @@ let pattern_catch_all exp =
     pc_rhs = exp }
 
 let value_binding_of_expr name expr =
-  Vb.mk ~attrs:[disable_warnings [8; 27]] (pattern_of_var name) expr
+  Vb.mk ~attrs:[disable_warnings [8; 27; 39]] (pattern_of_var name) expr
 
 let name_of_ppp n = n ^"_ppp"
 
@@ -531,18 +531,18 @@ let map_structure mapper str =
   List.fold_left (fun strs' str ->
       match str.pstr_desc with
       | Pstr_type (rec_flag, type_decls) ->
-        let str_to_emit = ref [] in
+        let vb_to_emit = ref [] in
         let new_type_decls =
           List.map (fun type_decl ->
               match ppp_of_type_declaration type_decl with
               | tdec, None -> tdec
               | tdec, Some vb ->
-                let s = Str.value Asttypes.Nonrecursive [vb] in
-                str_to_emit := s::!str_to_emit ;
+                vb_to_emit := vb::!vb_to_emit ;
                 tdec
             ) type_decls in
-        let str = Str.type_ rec_flag new_type_decls in
-        List.rev_append !str_to_emit (str::strs')
+        let strs = Str.type_ rec_flag new_type_decls :: strs' in
+        if !vb_to_emit = [] then strs else
+          (Str.value Asttypes.Recursive !vb_to_emit) :: strs
       | _ ->
         str::strs'
     ) [] strs |> List.rev
