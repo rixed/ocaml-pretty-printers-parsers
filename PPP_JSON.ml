@@ -26,6 +26,10 @@ let union x = PPP.union "{" "}" ":" groupings delims string x
 let (|||) x y = PPP.alternative " | " x y
 let variant name x = PPP.variant ":" "" " of " name x
 
+let tuple_open = "{"
+let tuple_close = "}"
+let tuple_sep = ","
+
 let pair (p1 : 'a PPP.t) (p2 : 'b PPP.t) : ('a * 'b) PPP.t =
   record (
     field "fst" p1 <->
