@@ -5,7 +5,9 @@ end
 module B = struct
   type t2 = int * string [@@ppp PPP_OCaml]  (* <- build t2_ppp for pair int string *)
 
-  type t3 = { foo : int ; bar : bool ; recursive : t3 list [@ppp_ignore []] } [@@ppp PPP_OCaml]
+  type t3 = { foo : int [@ppp_default 17] ;
+              bar : bool ;
+              recursive : t3 list [@ppp_ignore []] } [@@ppp PPP_OCaml]
 
   type t4 = Foo of int | Bar of string * int * bool | Baz [@@ppp PPP_OCaml]
 
@@ -37,4 +39,5 @@ let () =
   Printf.printf "<->%s\n" (mouline t7_ppp "Zap{a=PasGlop}") ;
   Printf.printf "<->%s\n" (mouline B.t3_ppp "{ foo=42; bar=false }") ;
   Printf.printf "<->%s\n" (mouline B.t3_ppp "{ foo=42; bar =true; }") ;
+  Printf.printf "<->%s\n" (mouline B.t3_ppp "{ bar =true; }") ;
   Printf.printf "<->%s\n" (mouline t8_ppp "(1, \"2\", true, 4.)")

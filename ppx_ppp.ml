@@ -244,19 +244,14 @@ and leftist_tree_all_expr ~options exps =
   let prev = some_of (List.hd exps) in
   loop true prev (List.tl exps)
 
-let field_exp_of_label_decl label_decl =
-  apply2 "field"
-    (Exp.constant (
-      Const.string
-        label_decl.pld_name.Asttypes.txt))
-    (ppp_exp_of_core_type label_decl.pld_type)
-
 let exp_of_label_decls ?constr_name label_decls =
   (* Some labels may be ignored: *)
   let ignored_labels, not_ignored_labels =
     List.fold_left (fun (ign, not_ign) label_decl ->
         match extract_expr_attribute "ppp_ignore" label_decl.pld_attributes with
-        | None -> ign, (label_decl :: not_ign)
+        | None ->
+          let default = extract_expr_attribute "ppp_default" label_decl.pld_attributes in
+          ign, ((label_decl, default) :: not_ign)
         | Some attr -> ((label_decl, attr) :: ign), not_ign
       ) ([], []) label_decls in
   (* For sanity: *)
@@ -265,6 +260,19 @@ let exp_of_label_decls ?constr_name label_decls =
   let default_of_field (label_decl, (v, _)) =
     ident_of_name label_decl.pld_name.Asttypes.txt,
     v in
+  let field_exp_of_label_decl = function
+    | label_decl, None ->
+      apply2 "field"
+        (Exp.constant (
+          Const.string
+            label_decl.pld_name.Asttypes.txt))
+        (ppp_exp_of_core_type label_decl.pld_type)
+    | label_decl, Some (v, _) ->
+      let params = [
+        Asttypes.Optional "default", exp_of_constr "Some" (Some v) ;
+        Asttypes.Nolabel, Exp.constant (Const.string label_decl.pld_name.Asttypes.txt) ;
+        Asttypes.Nolabel, ppp_exp_of_core_type label_decl.pld_type ] in
+      Exp.apply (exp_of_name "field") params in
   apply2 ">>:" (
     apply1 "record" (
       (* For each field, emit a field expression *)
@@ -287,7 +295,7 @@ let exp_of_label_decls ?constr_name label_decls =
     if nb_labels = 1 then (
       (* Special case: no need to go through a tuple of options, all we need
          is to get rid of the label or add it. *)
-      let label_decl = List.hd not_ignored_labels in
+      let label_decl, _ = List.hd not_ignored_labels in
       let label_name = label_decl.pld_name.Asttypes.txt in
       Exp.tuple [
         Exp.function_ [
@@ -314,7 +322,7 @@ let exp_of_label_decls ?constr_name label_decls =
             pc_guard = None ;
             pc_rhs =
               leftist_tree_all_expr ~options:true
-                (List.map (fun label_decl ->
+                (List.map (fun (label_decl, _) ->
                   field_exp_of_name "x" label_decl.pld_name.Asttypes.txt)
                   not_ignored_labels)
           }] ;
@@ -324,7 +332,7 @@ let exp_of_label_decls ?constr_name label_decls =
             pc_lhs = leftist_tree_all_pattern ~options:true nb_labels ;
             pc_guard = None ;
             pc_rhs = maybe_constr_record (Exp.record (
-                  List.mapi (fun i label_decl ->
+                  List.mapi (fun i (label_decl, _) ->
                       ident_of_name label_decl.pld_name.Asttypes.txt,
                       exp_of_name ("x"^ string_of_int i)
                     ) not_ignored_labels @
