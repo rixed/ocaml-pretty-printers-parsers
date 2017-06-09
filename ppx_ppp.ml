@@ -251,6 +251,7 @@ let exp_of_label_decls ?constr_name label_decls =
         match extract_expr_attribute "ppp_ignore" label_decl.pld_attributes with
         | None ->
           let default = extract_expr_attribute "ppp_default" label_decl.pld_attributes in
+          (* TODO: each time the record field is an option we should have an implicit default none *)
           ign, ((label_decl, default) :: not_ign)
         | Some attr -> ((label_decl, attr) :: ign), not_ign
       ) ([], []) label_decls in

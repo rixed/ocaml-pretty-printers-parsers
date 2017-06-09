@@ -6,10 +6,14 @@
 <->Glop {a=42; b=Some Foo 42}
 <->Glop {a=-2; b=Some Baz }
 <->Glop {a=0; b=Some Baz }
-<->Zap {a=PasGlop }
-<->Zap {a=PasGlop }
-<->Zap {a=PasGlop }
+<->Zap {a=Some PasGlop }
+<->Zap {a=Some PasGlop }
+<->Zap {a=Some PasGlop }
+<->Zap {a=None }
 <->{foo=42; bar=false}
 <->{foo=42; bar=true}
 <->{foo=17; bar=true}
 <->(1,"2",true,4.)
+<->{"field1":42, "field2":"bla", "field3":"x", "field4":10, "field5":false}
+<->{"field1":42, "field2":"bla", "field3":"z", "field4":null, "field5":false}
+<->{"field1":42, "field2":"bla", "field3":"x", "field4":1, "field5":true}
