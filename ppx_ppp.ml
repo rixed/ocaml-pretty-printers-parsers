@@ -203,7 +203,7 @@ and ppp_exp_of_core_type core_type =
   | Ptyp_alias (core_type, _name) ->
     ppp_exp_of_core_type core_type
   (* Polymorphic variants *)
-  | Ptyp_variant (fields, _closed_flag, labels_opt) ->
+  | Ptyp_variant (_fields, _closed_flag, _labels_opt) ->
     exp_todo "Polymorphic variants"
   | _ ->
     exp_todo "Some obscure core_type"
@@ -341,7 +341,7 @@ let variant_exp_of_constructor_decl constructor_decl =
       Const.string
         constructor_decl.pcd_name.Asttypes.txt))
     (match constructor_decl.pcd_res with
-    | Some core_type -> (* GATD? *) exp_todo "GATD?"
+    | Some _core_type -> (* GATD? *) exp_todo "GATD?"
     | None -> (* then a constructed type *)
       (match constructor_decl.pcd_args with
       | Pcstr_tuple lst -> ppp_exp_of_tuple lst
@@ -480,7 +480,7 @@ let exp_of_constructor_arguments constructor_decls =
           let constr_name = constructor_decl.pcd_name.Asttypes.txt in
           let nb_args = if construct_has_record constructor_decl then 1
                         else construct_nb_args constructor_decl in
-          let patterned_vars = List.mapi (fun j constructor_decl ->
+          let patterned_vars = List.mapi (fun j _constructor_decl ->
               if j = i then Some (nb_args, "x") else None
             ) constructor_decls in
           {
