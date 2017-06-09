@@ -186,6 +186,19 @@ let rec skip_blanks i o =
   | " " -> skip_blanks i (o + 1)
   | _ -> o
 
+let char quote : char t =
+  { printer = (fun o v -> o quote ; o (String.make 1 v) ; o quote) ;
+    scanner = (fun i o ->
+      let ql = String.length quote in
+      if i o ql <> quote then None else
+      let o = o + ql in
+      match i o 1 with
+      | "" -> None
+      | s ->
+        let o = o + 1 in
+        if i o ql <> quote then None else Some (s.[0], o+ql)) ;
+    descr = "char" }
+
 (* C-like strings. Format: "..." *)
 type string_part = First | Char | BackslashStart | Backslash
 let string : string t =
@@ -994,6 +1007,7 @@ struct
   let (--) = (--)
   let (>>:) = (>>:)
   let cst = cst
+  let char = char
   let string = string
   let bool = bool
   let int = int

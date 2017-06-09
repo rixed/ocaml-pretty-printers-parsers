@@ -12,6 +12,8 @@ let unit = cst "()"
   (Some ((), 2)) (of_string unit "()" 0)
  *)
 
+let char = char "'"
+
 let list (ppp : 'a PPP.t) : 'a list PPP.t =
   PPP.seq "list" "[" "]" ";" List.fold_left List.rev ppp
 (*$= list & ~printer:id

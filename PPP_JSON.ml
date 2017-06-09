@@ -10,6 +10,8 @@ let unit : unit PPP.t = cst "null"
   (Some ((), 4)) (of_string unit "null" 0)
  *)
 
+let char = PPP.char "\""
+
 let list (ppp : 'a PPP.t) : 'a list PPP.t =
   PPP.seq "list" "[" "]" "," List.fold_left List.rev ppp
 

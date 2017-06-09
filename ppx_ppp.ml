@@ -116,10 +116,10 @@ let value_binding_of_expr name expr =
 let name_of_ppp n = n ^"_ppp"
 
 let ppp_name_of_name = function
-  | ("bool" | "int" | "int8" | "int16" | "int32" | "int64" | "int128" |
-     "uint8" | "uint16" | "uint32" | "uint64" |
-     "uint128" | "float" | "string" | "unit" | "none" | "list" | "array" |
-     "option") as x -> x
+  | ("bool" | "char" | "int" | "float" | "string" | "unit" |
+     "int8" | "int16" | "int32" | "int64" | "int128" |
+     "uint8" | "uint16" | "uint32" | "uint64" | "uint128" |
+     "none" | "list" | "array" | "option") as x -> x
   | x -> name_of_ppp x
 
 let ppp_ident_of_ident = function
