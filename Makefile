@@ -13,7 +13,7 @@ SOURCES = $(PPP_SOURCES)
 PACKAGES = stdint
 
 all: .depend \
-		 ppx_ppp.opt ppx_test.opt
+		 ppx_ppp.opt ppx_test.opt ppx_test_source.ml
 
 %.cmo %.annot: %.ml
 	ocamlfind ocamlc   $(OCAMLFLAGS) -package "$(PACKAGES)" -c $<
@@ -41,6 +41,9 @@ ppx_test.cmx: PPP.cmxa ppx_ppp.opt ppx_test.ml
 ppx_test.opt: PPP.cmxa ppx_test.cmx
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -linkpkg -package stdint PPP.cmxa ppx_test.cmx -o $@
 
+ppx_test_source.ml: ppx_test.ml
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -package stdint -ppx ./ppx_ppp.opt PPP.cmxa -c $< -dsource 2> $@
+
 clean:
 	$(RM) *.cm[iox] *.cmxs *.a *.s *.o .depend *.annot all_tests.*
 
@@ -55,8 +58,11 @@ all_tests.ml: $(SOURCES)
 all_tests.opt: $(SOURCES:.ml=.cmx) all_tests.ml
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -o $@ -package "$(PACKAGES)" -package qcheck -linkpkg $^
 
-check: all_tests.opt
+check: all_tests.opt ppx_test.opt
 	@./all_tests.opt || echo "FAILURE"
+	@./ppx_test.opt > ppx_test.actual &&\
+	 diff ppx_test.expected ppx_test.actual &&\
+	 $(RM) ppx_test.actual
 
 # Installation
 

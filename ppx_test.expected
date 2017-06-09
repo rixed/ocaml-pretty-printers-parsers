@@ -1,0 +1,15 @@
+<->Glop {a=42; b=None }
+<->Glop {a=42; b=Some Bar ("bla",4,false)}
+<->Glop {a=42; b=Some Bar ("bla",4,true)}
+<->Glop {a=42; b=Some Bar ("bla",4,true)}
+<->Glop {a=42; b=Some Foo 42}
+<->Glop {a=42; b=Some Foo 42}
+<->Glop {a=-2; b=Some Baz }
+<->Glop {a=0; b=Some Baz }
+<->Zap {a=PasGlop }
+<->Zap {a=PasGlop }
+<->Zap {a=PasGlop }
+<->{foo=42; bar=false}
+<->{foo=42; bar=true}
+<->{foo=17; bar=true}
+<->(1,"2",true,4.)

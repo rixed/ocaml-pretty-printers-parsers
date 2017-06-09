@@ -11,3 +11,4 @@ oUnit-anon.cache
 *.opt
 .depend
 all_tests.*
+ppx_test_source.ml
