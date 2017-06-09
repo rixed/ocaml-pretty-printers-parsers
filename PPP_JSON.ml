@@ -12,6 +12,8 @@ let unit : unit PPP.t = cst "null"
 
 let char = PPP.char "\""
 
+let option ppp = PPP.option ~placeholder:(cst "null") ppp
+
 let list (ppp : 'a PPP.t) : 'a list PPP.t =
   PPP.seq "list" "[" "]" "," List.fold_left List.rev ppp
 
