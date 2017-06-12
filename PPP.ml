@@ -183,7 +183,7 @@ let next_eq w i o =
 
 let rec skip_blanks i o =
   match i o 1 with
-  | " " -> skip_blanks i (o + 1)
+  | " "|"\t"|"\r"|"\n"|"\b" -> skip_blanks i (o + 1)
   | _ -> o
 
 let char quote : char t =
