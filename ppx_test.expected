@@ -17,3 +17,5 @@
 <->{"field1":42, "field2":"bla", "field3":"x", "field4":10, "field5":false}
 <->{"field1":42, "field2":"bla", "field3":"z", "field4":null, "field5":false}
 <->{"field1":42, "field2":"bla", "field3":"x", "field4":1, "field5":true}
+<->{"NoArg":null}
+<->{"Arg":42}

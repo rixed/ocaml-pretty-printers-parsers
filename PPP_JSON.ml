@@ -29,6 +29,7 @@ let field ?default name x = PPP.field ":" ", " ": " ?default name x
 let union x = PPP.union "{" "}" ":" groupings delims string x
 let (|||) x y = PPP.alternative " | " x y
 let variant name x = PPP.variant ":" "" " of " name x
+let none = cst "null"
 
 let tuple_open = "["
 let tuple_close = "]"

@@ -31,6 +31,8 @@ type j1 = { field1 : int [@ppp_default 15];
             field4 : int option ;
             field5 : bool option [@ppp_default Some false] } [@@ppp PPP_JSON]
 
+type j2 = NoArg | Arg of int [@@ppp PPP_JSON]
+
 let () =
   let mouline ppp str =
     match PPP.of_string ppp str 0 with
@@ -54,4 +56,6 @@ let () =
   Printf.printf "<->%s\n" (mouline t8_ppp "(1, \"2\", true, 4.)") ;
   Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}") ;
   Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}") ;
-  Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}")
+  Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}") ;
+  Printf.printf "<->%s\n" (mouline j2_ppp "{\"NoArg\":null}") ;
+  Printf.printf "<->%s\n" (mouline j2_ppp "{\"Arg\":42}")

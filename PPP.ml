@@ -747,8 +747,9 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
       let opn_len = String.length opn
       and cls_len = String.length cls in
 
-      (* There could be some grouping, skip it. *)
-      let opened, o = skip_opened_groups groupings i o in
+      (* There could be some grouping, skip it (unless that's our openeing). *)
+      let groupings' = List.filter (fun (o, _) -> o <> opn) groupings in
+      let opened, o = skip_opened_groups groupings' i o in
       debug stderr "found %d opened groups\n%!" (List.length opened) ;
       let o = skip_blanks i o in
       match i o opn_len with
