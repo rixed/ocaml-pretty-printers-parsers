@@ -19,3 +19,4 @@
 <->{"field1":42, "field2":"bla", "field3":"x", "field4":1, "field5":true}
 <->{"NoArg":null}
 <->{"Arg":42}
+<->{"baz":{"J31":null}}

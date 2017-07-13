@@ -33,6 +33,10 @@ type j1 = { field1 : int [@ppp_default 15];
 
 type j2 = NoArg | Arg of int [@@ppp PPP_JSON]
 
+type j3 = J31 | J32 of string [@@ppp PPP_JSON]
+
+type j4 = { baz : j3 [@ppp_default J31] } [@@ppp PPP_JSON]
+
 let () =
   let mouline ppp str =
     match PPP.of_string ppp str 0 with
@@ -58,4 +62,5 @@ let () =
   Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}") ;
   Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}") ;
   Printf.printf "<->%s\n" (mouline j2_ppp "{\"NoArg\":null}") ;
-  Printf.printf "<->%s\n" (mouline j2_ppp "{\"Arg\":42}")
+  Printf.printf "<->%s\n" (mouline j2_ppp "{\"Arg\":42}") ;
+  Printf.printf "<->%s\n" (mouline j4_ppp "{ \"baz\": { \"J31\": null } }")

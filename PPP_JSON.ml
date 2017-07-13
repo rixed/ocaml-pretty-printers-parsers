@@ -20,7 +20,7 @@ let list (ppp : 'a PPP.t) : 'a list PPP.t =
 let array x = list x >>: (Array.to_list, Array.of_list)
 
 let groupings = [ "{","}" ; "[","]" ]
-let delims = [ "," ]
+let delims = [ "," ; ":" ]
 
 let record x = PPP.record "{" "}" ":" "," groupings delims string x
 let (<->) x y = PPP.sequence "; " x y

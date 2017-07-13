@@ -632,6 +632,14 @@ let rec skip_string ?(backslashed=false) i o =
   | _ -> skip_string i (o+1)
 
 let debug = Printf.ifprintf (*Printf.fprintf*)
+let list_print ep oc lst =
+  Printf.fprintf oc "[" ;
+  List.iteri (fun i e ->
+    Printf.fprintf oc "%s%a"
+      (if i > 0 then "; " else "")
+      ep e) lst ;
+  Printf.fprintf oc "]"
+let string_print oc str = Printf.fprintf oc "%S" str
 
 (* To be able to "reorder" records fields we need a function able to tell us
  * the length of a value, without knowing its type. If we have this, then we
@@ -669,19 +677,29 @@ and skip_group cls groupings delims i o =
   (* reads as many values and delimiters as to get out of that group. *)
   let clsl = String.length cls in
   let o = skip_blanks i o in
-  if stream_starts_with i o cls then
-    Some (o + clsl) else
-  (match skip_any groupings delims i o with
-  | None -> None
-  | Some o ->
-    let o = skip_blanks i o in
-    if stream_starts_with i o cls then Some (o + clsl) else
-    (match List.find (stream_starts_with i o) delims with
-    | exception Not_found -> None
-    | delim -> (* If we found a delim then we are not done yet *)
-      debug stderr "skip_any: found a delimiter at %d\n%!" o ;
-      let o = o + String.length delim in
-      skip_group cls groupings delims i o))
+  if stream_starts_with i o cls then (
+    debug stderr "skip_group: group start with close %S, ending\n%!" cls ;
+    Some (o + clsl)
+  ) else (
+    debug stderr "skip_group: recursing into skip_any from pos %d\n%!" o ;
+    match skip_any groupings delims i o with
+    | None -> None
+    | Some o ->
+      debug stderr "skip_group: skip_any returned at pos %d\n%!" o ;
+      let o = skip_blanks i o in
+      if stream_starts_with i o cls then (
+        Some (o + clsl)
+      ) else (
+        debug stderr "skip_group: not the end of this group, we should have a delim (%a).\n%!"
+          (list_print string_print) delims ;
+        match List.find (stream_starts_with i o) delims with
+        | exception Not_found -> None
+        | delim -> (* If we found a delim then we are not done yet *)
+          let o = o + String.length delim in
+          debug stderr "skip_any: found a delimiter ending at %d\n%!" o ;
+          skip_group cls groupings delims i o
+      )
+  )
 (*$= skip_any & ~printer:(function None -> "" | Some o -> string_of_int o)
   (Some 4) (skip_any [] [","] (string_reader "glop") 0)
   (Some 6) (skip_any ["(",")"] [] (string_reader "(glop)") 0)
@@ -750,43 +768,44 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
       (* There could be some grouping, skip it (unless that's our openeing). *)
       let groupings' = List.filter (fun (o, _) -> o <> opn) groupings in
       let opened, o = skip_opened_groups groupings' i o in
-      debug stderr "found %d opened groups\n%!" (List.length opened) ;
+      debug stderr "union: found %d opened groups\n%!" (List.length opened) ;
       let o = skip_blanks i o in
       match i o opn_len with
       | str when str = opn ->
-        debug stderr "found union opn %S\n%!" opn ;
+        debug stderr "union: found union opn %S\n%!" opn ;
         let o = o + opn_len in
+        let o = skip_blanks i o in
         (match name_ppp.scanner i o with
         | None -> None
         | Some (name, o') ->
-          debug stderr "found union name %S\n%!" name ;
+          debug stderr "union: found union name %S\n%!" name ;
           (* Now skip the eq sign *)
           let o' = skip_blanks i o' in
           let eq_len = String.length eq in
           (match i o' eq_len with
           | e when e = eq ->
-            debug stderr "found eq %S\n%!" eq ;
+            debug stderr "union: found eq %S\n%!" eq ;
             let o' = skip_blanks i (o' + eq_len) in
             (* Now the value *)
             let delims' = if cls_len > 0 then cls::delims else delims in
             (match skip_any groupings delims' i o' with
             | None -> None
             | Some o ->
-              debug stderr "found value, up to o=%d (starting at %d)\n%!" o o' ;
-              (* If there was some opened grouping at the beginning, then we
+              debug stderr "union: found value, up to o=%d (starting at %d)\n%!" o o' ;
+              (* If there were some opened grouping at the beginning, then we
                * must find them closed now: *)
               (match skip_closed_groups opened i o with
               | None -> None
               | Some o ->
-                debug stderr "found closed groupings\n%!" ;
+                debug stderr "union: found closed groupings\n%!" ;
                 let cls_pos = skip_blanks i o in
                 (* Check we have cls: *)
                 (match i cls_pos cls_len with
                 | str when str = cls ->
-                  debug stderr "found cls %S\n%!" cls ;
+                  debug stderr "union: found cls %S\n%!" cls ;
                   let chop_str = i o' (cls_pos - o') in
                   let value = chop_sub chop_str 0 (cls_pos - o') in
-                  debug stderr "found value %S\n%!" value ;
+                  debug stderr "union: found value %S\n%!" value ;
                   (* Here we have an issue. We may fail to parse the value in
                    * case of extraneous groupings again. This is a bit annoying
                    * since some parsers may depends on the groups to be present
@@ -797,20 +816,26 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                    * then 1 parentheses which will eventually succeed (notice 0
                    * parentheses would fail). *)
                   let rec try_ungroup opened i o =
+                    debug stderr "union: trying to parse value for label %S\n%!" name ;
                     match s name i o with
                     | Some (v, o) ->
-                      debug stderr "parsed value!\n%!" ;
+                      debug stderr "union: parsed value!\n%!" ;
                       (* If we had to open some groups, check we can now close
                        * them: *)
                       (match skip_closed_groups opened i o with
                       | None ->
-                        debug stderr "Cannot close %d opened groups around value %S" (List.length opened) value ;
+                        debug stderr "union: Cannot close %d opened groups around value %S" (List.length opened) value ;
                         None
                       | Some oo -> Some (v, oo))
                     | None ->
+                      debug stderr "union: cannot parse value from %d\n%!" o ;
                       (match opened_group groupings i o with
-                      | None -> None
+                      | None ->
+                        debug stderr "union: but this is not a group opening. Game over!\n%!" ;
+                        None
                       | Some (group, o) ->
+                        let o = skip_blanks i o in
+                        debug stderr "union: retry from %d after the opened group\n%!" o ;
                         try_ungroup (group::opened) i o)
                   in
                   let ii = string_reader value in
@@ -822,7 +847,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                     if oo = String.length value then
                       Some (v, cls_pos + cls_len)
                     else (
-                      debug stderr "garbage at end of value %S from offset %d\n%!" value oo ;
+                      debug stderr "union: garbage at end of value %S from offset %d\n%!" value oo ;
                       None
                     ))
                 | _ -> None)))
