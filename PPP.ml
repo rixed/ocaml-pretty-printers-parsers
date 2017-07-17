@@ -533,10 +533,15 @@ let int : int t =
   None (of_string int "+glop" 0)
  *)
 
+(* Some languages (JSON...) forbids "42." but want "42.0" while all accept "42.0" *)
+let my_string_of_float f =
+  let s = string_of_float f in
+  if s.[ String.length s - 1 ] = '.' then s ^ "0" else s
+
 (* General format: [sign] digits ["." [FFF]] [e [sign] EEE] *)
 type float_part = IntStart | Int | Frac | ExpStart | Exp
 let float : float t =
-  { printer = (fun o v -> o (string_of_float v)) ;
+  { printer = (fun o v -> o (my_string_of_float v)) ;
     scanner = (fun i o ->
       let rec loop o oo s n sc es exp part =
         match part, i o 1 with
