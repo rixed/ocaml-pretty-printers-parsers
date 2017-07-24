@@ -9,7 +9,7 @@ exception MissingRequiredField (* used by ppx *)
 
 let is_letter c = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 let is_digit c = c >= '0' && c <= '9'
-let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r'
+let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r' || c = '\b'
 let zero = Char.code '0'
 let str_is_digit s = String.length s > 0 && is_digit s.[0]
 let digit_of s = Char.code s.[0] - zero
@@ -91,14 +91,18 @@ let string_reader s o l =
 let of_string ppp s =
   ppp.scanner (string_reader s)
 
+let chop s = chop_sub s 0 (String.length s)
+
 exception ParseError (* TODO: an error message would be useful *)
 let of_string_exc ppp s =
+  let s = chop s in
   match of_string ppp s 0 with
   | None -> raise ParseError
   | Some (_, l) when l < String.length s -> raise ParseError
   | Some (x, _) -> x
 
 let of_string_res ppp s =
+  let s = chop s in
   match of_string ppp s 0 with
   | None -> Error ()
   | Some (_, l) when l < String.length s -> Error ()
@@ -182,9 +186,9 @@ let next_eq w i o =
   else false, o
 
 let rec skip_blanks i o =
-  match i o 1 with
-  | " "|"\t"|"\r"|"\n"|"\b" -> skip_blanks i (o + 1)
-  | _ -> o
+  let s = i o 1 in
+  if String.length s = 1 && is_blank s.[0] then skip_blanks i (o + 1)
+  else o
 
 let char quote : char t =
   { printer = (fun o v -> o quote ; o (String.make 1 v) ; o quote) ;
