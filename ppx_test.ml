@@ -37,6 +37,12 @@ type j3 = J31 | J32 of string [@@ppp PPP_JSON]
 
 type j4 = { baz : j3 [@ppp_default J31] } [@@ppp PPP_JSON]
 
+type j5 = int list [@@ppp PPP_JSON]
+
+open Stdint
+type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON]
+type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON]
+
 let () =
   let mouline ppp str =
     match PPP.of_string ppp str 0 with
@@ -63,4 +69,45 @@ let () =
   Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}") ;
   Printf.printf "<->%s\n" (mouline j2_ppp "{\"NoArg\":null}") ;
   Printf.printf "<->%s\n" (mouline j2_ppp "{\"Arg\":42}") ;
-  Printf.printf "<->%s\n" (mouline j4_ppp "{ \"baz\": { \"J31\": null } }")
+  Printf.printf "<->%s\n" (mouline j4_ppp "{ \"baz\": { \"J31\": null } }") ;
+  Printf.printf "<->%s\n" (mouline j5_ppp "[42,12]") ;
+  Printf.printf "<->%s\n" (mouline j5_ppp "[42, 12]") ;
+  Printf.printf "<->%s\n" (mouline j5_ppp "[42 ,12]") ;
+  Printf.printf "<->%s\n" (mouline j5_ppp "[ 42, 12 ] ") ;
+  Printf.printf "<->%s\n" (mouline j5_ppp " [42 , 12]") ;
+  Printf.printf "<->%s\n" (mouline j5_ppp "  [ 42 , 12   ] ") ;
+  Printf.printf "<->%s\n" (mouline arrt_ppp "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }") ;
+  Printf.printf "<->%s\n" (mouline arrt_ppp "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }") ;
+  Printf.printf "<->%s\n" (mouline export_msg_ppp "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}") ;
+  Printf.printf "<->%s\n" (mouline export_msg_ppp "{\"first\":1,\"columns\":[[\"h1\",false,{\"AU64\":[1]}]]}") ;
+  let str = "{\n\
+     \"columns\" : [\n\
+      [\n\
+         \"h1\",\n\
+         false,\n\
+         { \"AU64\" : [ 1493409900015801, 1493409342783959 ] }\n\
+      ], [\n\
+         \"h2\",\n\
+         false,\n\
+         { \"AU64\" : [ 1493409971653419, 1493409400273526 ] }\n\
+      ], [\n\
+         \"h3\",\n\
+         false,\n\
+         { \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }\n\
+      ], [\n\
+         \"h4\",\n\
+         false,\n\
+         { \"AFloat\" : [ 1949.54835042, 225383.363907 ] }\n\
+      ], [\n\
+         \"h5\",\n\
+         false,\n\
+         { \"AU32\" : [ 50, 50 ] }\n\
+      ], [\n\
+         \"h6\",\n\
+         false,\n\
+         { \"AU32\" : [ 72, 72 ] }\n\
+      ]\n\
+   ],\n\
+   \"first\" : 583\n\
+  }" in
+  Printf.printf "<->%s\n" (mouline export_msg_ppp str)

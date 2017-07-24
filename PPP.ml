@@ -333,19 +333,22 @@ let seq name opn cls sep fold of_rev_list ppp =
       o cls) ;
     scanner = (fun i o ->
       let rec parse_sep prev o =
+        let o = skip_blanks i o in
         if stream_starts_with i o sep then
           parse_item prev (o + String.length sep)
         else if stream_starts_with i o cls then
-            Some (of_rev_list prev, o + String.length cls)
+          Some (of_rev_list prev, o + String.length cls)
         else None
       and parse_item prev o =
+        let o = skip_blanks i o in
         match ppp.scanner i o with
-        | Some (x, o') -> parse_sep (x::prev) o'
+        | Some (x, o) -> parse_sep (x::prev) o
         | None ->
           if stream_starts_with i o cls then
             Some (of_rev_list prev, o + String.length cls)
           else None
       in
+      let o = skip_blanks i o in
       if stream_starts_with i o opn then
         parse_item [] (o + String.length opn)
       else None) ;
