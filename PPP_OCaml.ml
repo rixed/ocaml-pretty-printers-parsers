@@ -12,7 +12,7 @@ let unit = cst "()"
   (Some ((), 2)) (of_string unit "()" 0)
  *)
 
-let char = char "'"
+let char = PPP.char "'"
 
 let float = PPP.float "nan" "inf"
 

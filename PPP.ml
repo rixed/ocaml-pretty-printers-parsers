@@ -1063,7 +1063,7 @@ struct
   let (--) = (--)
   let (>>:) = (>>:)
   let cst = cst
-  let char = char
+  let char = char "'"
   let string = string
   let bool = bool
   let int = int
