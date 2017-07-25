@@ -547,8 +547,12 @@ let my_string_of_float f =
 
 (* General format: [sign] digits ["." [FFF]] [e [sign] EEE] *)
 type float_part = IntStart | Int | Frac | ExpStart | Exp
-let float : float t =
-  { printer = (fun o v -> o (my_string_of_float v)) ;
+let float nan inf : float t =
+  { printer = (fun o v ->
+      match classify_float v with
+      | FP_infinite -> if v < 0. then o "-"; o inf
+      | FP_nan -> o nan
+      | _ -> o (my_string_of_float v)) ;
     scanner = (fun i o ->
       let rec loop o oo s n sc es exp part =
         match part, i o 1 with
@@ -566,31 +570,45 @@ let float : float t =
             loop (o+1) (o+1) s n sc es (exp * 10 + digit_of d) Exp
         | _ -> oo, s, n, sc, es, exp
       in
-      let oo, s, n, sc, es, exp = loop o o 1 0 0 1 0 IntStart in
-      if oo > o then Some (
-          float_of_int (s * n) *. 10. ** float_of_int (es * exp - sc), oo)
-      else None) ;
+      if stream_starts_with i o nan then
+        Some (Pervasives.nan, o + String.length nan)
+      else if stream_starts_with i o inf then
+        Some (infinity, o + String.length inf)
+      else if stream_starts_with i o ("-"^ inf) then
+        Some (neg_infinity, o + 1 + String.length inf)
+      else (
+        let oo, s, n, sc, es, exp = loop o o 1 0 0 1 0 IntStart in
+        if oo > o then Some (
+            float_of_int (s * n) *. 10. ** float_of_int (es * exp - sc), oo)
+        else None
+      )) ;
     descr = "float" }
 (*$= float & ~printer:id
-  "-0.00010348413604" (to_string float (-0.00010348413604))
+  "-0.00010348413604" (to_string (float "nan" "inf") (-0.00010348413604))
+  "nan" (to_string (float "nan" "inf") nan)
+  "inf" (to_string (float "nan" "inf") infinity)
+  "-inf" (to_string (float "nan" "inf") neg_infinity)
  *)
 (*$= float & ~printer:(function None -> "" | Some (f,i) -> Printf.sprintf "(%f, %d)" f i)
-  (Some (3.14, 4)) (of_string float "3.14" 0)
-  (Some (3.14, 6)) (of_string float "314e-2" 0)
-  (Some (3.14, 8)) (of_string float "0.0314E2" 0)
-  (Some (~-.3.14, 9)) (of_string float "-0.0314E2" 0)
-  (Some (42., 2)) (of_string float "42" 0)
-  (Some (~-.42., 3)) (of_string float "-42" 0)
-  (Some (42., 3)) (of_string float "42." 0)
-  (Some (~-.42., 4)) (of_string float "-42." 0)
-  (Some (42., 5)) (of_string float "+42e0" 0)
-  (Some (42., 6)) (of_string float "+42.e0" 0)
-  (Some (42., 7)) (of_string float "+42.0e0" 0)
-  None (of_string float "glop" 0)
-  None (of_string float "+glop" 0)
-  None (of_string float "-glop" 0)
-  (Some (1., 1)) (of_string float "1e" 0)
-  (Some (-0.00010348413604, 17)) (of_string float "-0.00010348413604" 0)
+  (Some (3.14, 4)) (of_string (float "nan" "inf") "3.14" 0)
+  (Some (3.14, 6)) (of_string (float "nan" "inf") "314e-2" 0)
+  (Some (3.14, 8)) (of_string (float "nan" "inf") "0.0314E2" 0)
+  (Some (~-.3.14, 9)) (of_string (float "nan" "inf") "-0.0314E2" 0)
+  (Some (42., 2)) (of_string (float "nan" "inf") "42" 0)
+  (Some (~-.42., 3)) (of_string (float "nan" "inf") "-42" 0)
+  (Some (42., 3)) (of_string (float "nan" "inf") "42." 0)
+  (Some (~-.42., 4)) (of_string (float "nan" "inf") "-42." 0)
+  (Some (42., 5)) (of_string (float "nan" "inf") "+42e0" 0)
+  (Some (42., 6)) (of_string (float "nan" "inf") "+42.e0" 0)
+  (Some (42., 7)) (of_string (float "nan" "inf") "+42.0e0" 0)
+  None (of_string (float "nan" "inf") "glop" 0)
+  None (of_string (float "nan" "inf") "+glop" 0)
+  None (of_string (float "nan" "inf") "-glop" 0)
+  (Some (1., 1)) (of_string (float "nan" "inf") "1e" 0)
+  (Some (-0.00010348413604, 17)) \
+    (of_string (float "nan" "inf") "-0.00010348413604" 0)
+  (Some (infinity, 3)) (of_string (float "nan" "inf") "inf" 0)
+  (Some (neg_infinity, 4)) (of_string (float "nan" "inf") "-inf" 0)
  *)
 
 let option ?placeholder ppp =
@@ -1059,7 +1077,7 @@ struct
   let uint64 = uint64
   let int128 = int128
   let uint128 = uint128
-  let float = float
+  let float = float "nan" "inf"
   let list ppp = seq "list" "(" ")" ";" List.fold_left List.rev ppp
   let array ppp = seq "array" "(" ")" ";" Array.fold_left (fun l -> Array.of_list (List.rev l)) ppp
   let unit = cst "_"

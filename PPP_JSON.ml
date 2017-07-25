@@ -12,6 +12,8 @@ let unit : unit PPP.t = cst "null"
 
 let char = PPP.char "\""
 
+let float = PPP.float "null" "null"
+
 let option ppp = PPP.option ~placeholder:(cst "null") ppp
 
 let list (ppp : 'a PPP.t) : 'a list PPP.t =

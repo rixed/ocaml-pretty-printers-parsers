@@ -14,6 +14,8 @@ let unit = cst "()"
 
 let char = char "'"
 
+let float = PPP.float "nan" "inf"
+
 let list (ppp : 'a PPP.t) : 'a list PPP.t =
   PPP.seq "list" "[" "]" ";" List.fold_left List.rev ppp
 (*$= list & ~printer:id
