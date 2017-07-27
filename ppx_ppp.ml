@@ -117,8 +117,8 @@ let name_of_ppp n = n ^"_ppp"
 
 let ppp_name_of_name = function
   | ("bool" | "char" | "int" | "float" | "string" | "unit" |
-     "int8" | "int16" | "int32" | "int64" | "int128" |
-     "uint8" | "uint16" | "uint32" | "uint64" | "uint128" |
+     "int8" | "int16" | "int32" | "int40" | "int48" | "int56" | "int64" | "int128" |
+     "uint8" | "uint16" | "uint32" | "uint40" | "uint48" | "uint56" | "uint64" | "uint128" |
      "none" | "list" | "array" | "option") as x -> x
   | x -> name_of_ppp x
 

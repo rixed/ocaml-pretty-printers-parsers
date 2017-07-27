@@ -456,6 +456,7 @@ let bool : bool t =
 (* General format: [sign] digits *)
 type int_part = IntStart | Int
 
+(* TODO: support for base changing prefix? *)
 let generic_int_scanner of_int add mul zero neg i o =
   let rec loop o oo s n part =
     match part, i o 1 with
@@ -489,6 +490,36 @@ let uint64 : uint64 t =
   { printer = (fun o v -> o (Uint64.to_string v)) ;
     scanner = (let open Uint64 in generic_int_scanner of_int add mul zero neg) ;
     descr = "uint64" }
+
+let int56 : int56 t =
+  { printer = (fun o v -> o (Int56.to_string v)) ;
+    scanner = (let open Int56 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "int56" }
+
+let uint56 : uint56 t =
+  { printer = (fun o v -> o (Uint56.to_string v)) ;
+    scanner = (let open Uint56 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "uint56" }
+
+let int48 : int48 t =
+  { printer = (fun o v -> o (Int48.to_string v)) ;
+    scanner = (let open Int48 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "int48" }
+
+let uint48 : uint48 t =
+  { printer = (fun o v -> o (Uint48.to_string v)) ;
+    scanner = (let open Uint48 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "uint48" }
+
+let int40 : int40 t =
+  { printer = (fun o v -> o (Int40.to_string v)) ;
+    scanner = (let open Int40 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "int40" }
+
+let uint40 : uint40 t =
+  { printer = (fun o v -> o (Uint40.to_string v)) ;
+    scanner = (let open Uint40 in generic_int_scanner of_int add mul zero neg) ;
+    descr = "uint40" }
 
 let int32 : int32 t =
   { printer = (fun o v -> o (Int32.to_string v)) ;
@@ -1073,6 +1104,12 @@ struct
   let uint16 = uint16
   let int32 = int32
   let uint32 = uint32
+  let int40 = int40
+  let uint40 = uint40
+  let int48 = int48
+  let uint48 = uint48
+  let int56 = int56
+  let uint56 = uint56
   let int64 = int64
   let uint64 = uint64
   let int128 = int128

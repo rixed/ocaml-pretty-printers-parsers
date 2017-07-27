@@ -23,6 +23,9 @@ type t7 = Zap of { a: t6 option } [@@ppp PPP_OCaml]
 
 type t8 = int * string * bool * float [@@ppp PPP_OCaml]
 
+open Stdint
+type t9 = { u40 : uint40 ; i48 : int48 ; u56 : uint56 } [@@ppp PPP_OCaml]
+
 (* Now some JSON types *)
 
 type j1 = { field1 : int [@ppp_default 15];
@@ -39,7 +42,6 @@ type j4 = { baz : j3 [@ppp_default J31] } [@@ppp PPP_JSON]
 
 type j5 = int list [@@ppp PPP_JSON]
 
-open Stdint
 type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON]
 type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON]
 
@@ -48,38 +50,41 @@ let () =
     match PPP.of_string ppp str 0 with
     | Some (x, _) -> PPP.to_string ppp x
     | None -> "Parse error" in
-  Printf.printf "<->%s\n" (mouline t6_ppp "Glop { a = 42 ; b = None }") ;
-  Printf.printf "<->%s\n" (mouline t6_ppp "Glop { a = 42 ; b = Some (Bar (\"bla\", 4, false)) }") ;
-  Printf.printf "<->%s\n" (mouline t6_ppp "Glop{a =42; b= Some (Bar(\"bla\"  , 4, true)) }") ;
-  Printf.printf "<->%s\n" (mouline t6_ppp "Glop{a=42;b=Some(Bar(\"bla\",4, true))}") ;
-  Printf.printf "<->%s\n" (mouline t6_ppp "Glop { a = 42 ; b = Some (Foo 42) }") ;
-  Printf.printf "<->%s\n" (mouline t6_ppp "Glop { a = 42 ; b = Some (Foo (42)) }") ;
-  Printf.printf "<->%s\n" (mouline t6_ppp "Glop { a = -2 ; b = Some Baz }") ;
-  Printf.printf "<->%s\n" (mouline t6_ppp "Glop { a = 0 ; b = Some(Baz) }") ;
-  Printf.printf "<->%s\n" (mouline t7_ppp "Zap { a = Some PasGlop }") ;
-  Printf.printf "<->%s\n" (mouline t7_ppp "Zap{ a= Some PasGlop}") ;
-  Printf.printf "<->%s\n" (mouline t7_ppp "Zap{a=Some(PasGlop)}") ;
-  Printf.printf "<->%s\n" (mouline t7_ppp "Zap{a=None}") ;
-  Printf.printf "<->%s\n" (mouline B.t3_ppp "{ foo=42; bar=false }") ;
-  Printf.printf "<->%s\n" (mouline B.t3_ppp "{ foo=42; bar =true; }") ;
-  Printf.printf "<->%s\n" (mouline B.t3_ppp "{ bar =true; }") ;
-  Printf.printf "<->%s\n" (mouline t8_ppp "(1, \"2\", true, 4.)") ;
-  Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}") ;
-  Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}") ;
-  Printf.printf "<->%s\n" (mouline j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}") ;
-  Printf.printf "<->%s\n" (mouline j2_ppp "{\"NoArg\":null}") ;
-  Printf.printf "<->%s\n" (mouline j2_ppp "{\"Arg\":42}") ;
-  Printf.printf "<->%s\n" (mouline j4_ppp "{ \"baz\": { \"J31\": null } }") ;
-  Printf.printf "<->%s\n" (mouline j5_ppp "[42,12]") ;
-  Printf.printf "<->%s\n" (mouline j5_ppp "[42, 12]") ;
-  Printf.printf "<->%s\n" (mouline j5_ppp "[42 ,12]") ;
-  Printf.printf "<->%s\n" (mouline j5_ppp "[ 42, 12 ] ") ;
-  Printf.printf "<->%s\n" (mouline j5_ppp " [42 , 12]") ;
-  Printf.printf "<->%s\n" (mouline j5_ppp "  [ 42 , 12   ] ") ;
-  Printf.printf "<->%s\n" (mouline arrt_ppp "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }") ;
-  Printf.printf "<->%s\n" (mouline arrt_ppp "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }") ;
-  Printf.printf "<->%s\n" (mouline export_msg_ppp "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}") ;
-  Printf.printf "<->%s\n" (mouline export_msg_ppp "{\"first\":1,\"columns\":[[\"h1\",false,{\"AU64\":[1]}]]}") ;
+  let test_string_conv ppp s =
+    Printf.printf "%s: %s\n" ppp.PPP.descr (mouline ppp s) in
+  test_string_conv t6_ppp "Glop { a = 42 ; b = None }" ;
+  test_string_conv t6_ppp "Glop { a = 42 ; b = Some (Bar (\"bla\", 4, false)) }" ;
+  test_string_conv t6_ppp "Glop{a =42; b= Some (Bar(\"bla\"  , 4, true)) }" ;
+  test_string_conv t6_ppp "Glop{a=42;b=Some(Bar(\"bla\",4, true))}" ;
+  test_string_conv t6_ppp "Glop { a = 42 ; b = Some (Foo 42) }" ;
+  test_string_conv t6_ppp "Glop { a = 42 ; b = Some (Foo (42)) }" ;
+  test_string_conv t6_ppp "Glop { a = -2 ; b = Some Baz }" ;
+  test_string_conv t6_ppp "Glop { a = 0 ; b = Some(Baz) }" ;
+  test_string_conv t7_ppp "Zap { a = Some PasGlop }" ;
+  test_string_conv t7_ppp "Zap{ a= Some PasGlop}" ;
+  test_string_conv t7_ppp "Zap{a=Some(PasGlop)}" ;
+  test_string_conv t7_ppp "Zap{a=None}" ;
+  test_string_conv B.t3_ppp "{ foo=42; bar=false }" ;
+  test_string_conv B.t3_ppp "{ foo=42; bar =true; }" ;
+  test_string_conv B.t3_ppp "{ bar =true; }" ;
+  test_string_conv t8_ppp "(1, \"2\", true, 4.)" ;
+  test_string_conv t9_ppp "{u40 = 42190; u56=429000 ; i48 = -42 }" ;
+  test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;
+  test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}" ;
+  test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}" ;
+  test_string_conv j2_ppp "{\"NoArg\":null}" ;
+  test_string_conv j2_ppp "{\"Arg\":42}" ;
+  test_string_conv j4_ppp "{ \"baz\": { \"J31\": null } }" ;
+  test_string_conv j5_ppp "[42,12]" ;
+  test_string_conv j5_ppp "[42, 12]" ;
+  test_string_conv j5_ppp "[42 ,12]" ;
+  test_string_conv j5_ppp "[ 42, 12 ] " ;
+  test_string_conv j5_ppp " [42 , 12]" ;
+  test_string_conv j5_ppp "  [ 42 , 12   ] " ;
+  test_string_conv arrt_ppp "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }" ;
+  test_string_conv arrt_ppp "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }" ;
+  test_string_conv export_msg_ppp "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}" ;
+  test_string_conv export_msg_ppp "{\"first\":1,\"columns\":[[\"h1\",false,{\"AU64\":[1]}]]}" ;
   let str = "{\n\
      \"columns\" : [\n\
       [\n\
@@ -110,4 +115,4 @@ let () =
    ],\n\
    \"first\" : 583\n\
   }" in
-  Printf.printf "<->%s\n" (mouline export_msg_ppp str)
+  test_string_conv export_msg_ppp str

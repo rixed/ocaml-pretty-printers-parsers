@@ -1,33 +1,34 @@
-<->Glop {a=42; b=None }
-<->Glop {a=42; b=Some Bar ("bla",4,false)}
-<->Glop {a=42; b=Some Bar ("bla",4,true)}
-<->Glop {a=42; b=Some Bar ("bla",4,true)}
-<->Glop {a=42; b=Some Foo 42}
-<->Glop {a=42; b=Some Foo 42}
-<->Glop {a=-2; b=Some Baz }
-<->Glop {a=0; b=Some Baz }
-<->Zap {a=Some PasGlop }
-<->Zap {a=Some PasGlop }
-<->Zap {a=Some PasGlop }
-<->Zap {a=None }
-<->{foo=42; bar=false}
-<->{foo=42; bar=true}
-<->{foo=17; bar=true}
-<->(1,"2",true,4.0)
-<->{"field1":42, "field2":"bla", "field3":"x", "field4":10, "field5":false}
-<->{"field1":42, "field2":"bla", "field3":"z", "field4":null, "field5":false}
-<->{"field1":42, "field2":"bla", "field3":"x", "field4":1, "field5":true}
-<->{"NoArg":null}
-<->{"Arg":42}
-<->{"baz":{"J31":null}}
-<->[42,12]
-<->[42,12]
-<->[42,12]
-<->[42,12]
-<->[42,12]
-<->[42,12]
-<->{"AFloat":[26.3129910322,93.4604360475]}
-<->{"AU64":[1493409971653419,1493409400273526]}
-<->{"first":1, "columns":[["h1",false,{"AU64":[1]}]]}
-<->{"first":1, "columns":[["h1",false,{"AU64":[1]}]]}
-<->{"first":583, "columns":[["h1",false,{"AU64":[1493409900015801,1493409342783959]}],["h2",false,{"AU64":[1493409971653419,1493409400273526]}],["h3",false,{"AFloat":[26.3129910322,93.4604360475]}],["h4",false,{"AFloat":[1949.54835042,225383.363907]}],["h5",false,{"AU32":[50,50]}],["h6",false,{"AU32":[72,72]}]]}
+PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=42; b=None }
+PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=42; b=Some Bar ("bla",4,false)}
+PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=42; b=Some Bar ("bla",4,true)}
+PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=42; b=Some Bar ("bla",4,true)}
+PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=42; b=Some Foo 42}
+PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=42; b=Some Foo 42}
+PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=-2; b=Some Baz }
+PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=0; b=Some Baz }
+Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None} | None}: Zap {a=Some PasGlop }
+Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None} | None}: Zap {a=Some PasGlop }
+Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None} | None}: Zap {a=Some PasGlop }
+Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None} | None}: Zap {a=None }
+{foo: int; bar: boolean}: {foo=42; bar=false}
+{foo: int; bar: boolean}: {foo=42; bar=true}
+{foo: int; bar: boolean}: {foo=17; bar=true}
+(int,string,boolean,float): (1,"2",true,4.0)
+{u40: uint40; i48: int48; u56: uint56}: {u40=42190; i48=-42; u56=429000}
+{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"x", "field4":10, "field5":false}
+{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"z", "field4":null, "field5":false}
+{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"x", "field4":1, "field5":true}
+NoArg of null | Arg of int: {"NoArg":null}
+NoArg of null | Arg of int: {"Arg":42}
+{baz: J31 of null | J32 of string}: {"baz":{"J31":null}}
+list of int: [42,12]
+list of int: [42,12]
+list of int: [42,12]
+list of int: [42,12]
+list of int: [42,12]
+list of int: [42,12]
+AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AFloat":[26.3129910322,93.4604360475]}
+AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AU64":[1493409971653419,1493409400273526]}
+{first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":1, "columns":[["h1",false,{"AU64":[1]}]]}
+{first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":1, "columns":[["h1",false,{"AU64":[1]}]]}
+{first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":583, "columns":[["h1",false,{"AU64":[1493409900015801,1493409342783959]}],["h2",false,{"AU64":[1493409971653419,1493409400273526]}],["h3",false,{"AFloat":[26.3129910322,93.4604360475]}],["h4",false,{"AFloat":[1949.54835042,225383.363907]}],["h5",false,{"AU32":[50,50]}],["h6",false,{"AU32":[72,72]}]]}
