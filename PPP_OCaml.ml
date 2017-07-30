@@ -95,7 +95,8 @@ let triple = Tuple.tuple3
 let groupings = [ "{","}" ; "[","]" ; "(",")" ; "[|","|]" ; "begin","end" ]
 let delims = [ "," ; ";" ]
 
-let record x = PPP.record "{" "}" "=" ";" groupings delims PPP.identifier x
+let record ?extensible x =
+  PPP.record ?extensible "{" "}" "=" ";" groupings delims PPP.identifier x
 let (<->) x y = PPP.sequence "; " x y
 let field ?default name x = PPP.field "=" "; " ": " ?default name x
 

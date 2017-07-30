@@ -41,6 +41,8 @@ type j4 = { baz : j3 [@ppp_default J31] } [@@ppp PPP_JSON]
 
 type j5 = int list [@@ppp PPP_JSON]
 
+type j6_extens = { mandatory : int ; optional : string [@ppp_default "default"] } [@@ppp PPP_JSON] [@@ppp_extensible]
+
 type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON]
 type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON]
 
@@ -80,6 +82,9 @@ let () =
   test_string_conv j5_ppp "[ 42, 12 ] " ;
   test_string_conv j5_ppp " [42 , 12]" ;
   test_string_conv j5_ppp "  [ 42 , 12   ] " ;
+  (* Check it's OK to have more fields than declared: *)
+  test_string_conv j6_extens_ppp "{\"mandatory\":1, \"extra\": [1,2,3]}" ;
+  test_string_conv j6_extens_ppp "{\"optional\" : \"present\" , \"extra\" : { \"foo\":42 }, \"mandatory\":1 }" ;
   test_string_conv arrt_ppp "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }" ;
   test_string_conv arrt_ppp "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }" ;
   test_string_conv export_msg_ppp "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}" ;

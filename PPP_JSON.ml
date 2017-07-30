@@ -24,7 +24,8 @@ let array x = list x >>: (Array.to_list, Array.of_list)
 let groupings = [ "{","}" ; "[","]" ]
 let delims = [ "," ; ":" ]
 
-let record x = PPP.record "{" "}" ":" "," groupings delims string x
+let record ?extensible x =
+  PPP.record ?extensible "{" "}" ":" "," groupings delims string x
 let (<->) x y = PPP.sequence "; " x y
 let field ?default name x = PPP.field ":" ", " ": " ?default name x
 

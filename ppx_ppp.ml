@@ -5,10 +5,13 @@ open Ast_helper
 let exp_todo n =
   Exp.constant (Const.string ("TODO:"^n))
 
-let extract_ident_attribute n attrs =
-  let rec loop prev = function
-    | [] -> None
-    | ({ Asttypes.txt ; _ }, (* Match identifier (to get module name for @@ppp *)
+(* Return Some ident * bool * other_attributes, where the bool tells if
+ * the ppp is extensible and the ident is the PPP implementation module *)
+let extract_ident_attribute attrs =
+  let rec loop mod_opt extensible others = function
+    | [] -> mod_opt, extensible, List.rev others
+    | ({ Asttypes.txt = "ppp" ; _ },
+       (* Match identifier (to get module name for @@ppp *)
        PStr [
          { pstr_desc =
              Pstr_eval ({
@@ -16,22 +19,24 @@ let extract_ident_attribute n attrs =
                  Pexp_construct (ident, _) ;
                _ }, _) ;
            _ }
-       ] )::rest when txt = n ->
-      Some (ident, List.rev_append prev rest)
-    | x::rest ->
-      loop (x :: prev) rest in
-  loop [] attrs
+       ])::rest ->
+      loop (Some ident) extensible others rest
+    | ({ Asttypes.txt = "ppp_extensible" ; _ }, PStr [])::rest ->
+      loop mod_opt true others rest
+    | attr::rest ->
+      loop mod_opt extensible (attr :: others) rest in
+  loop None false [] attrs
 
 let extract_expr_attribute n attrs =
-  let rec loop prev = function
+  let rec loop others = function
     | [] -> None
     | ({ Asttypes.txt ; _ }, (* Match expressions (to get default values *)
        PStr [
          { pstr_desc = Pstr_eval (exp, _) ; _ }
        ] )::rest when txt = n ->
-      Some (exp, List.rev_append prev rest)
+      Some (exp, List.rev_append others rest)
     | x::rest ->
-      loop (x :: prev) rest in
+      loop (x :: others) rest in
   loop [] attrs
 
 let loc_of x =
@@ -244,7 +249,7 @@ and leftist_tree_all_expr ~options exps =
   let prev = some_of (List.hd exps) in
   loop true prev (List.tl exps)
 
-let exp_of_label_decls ?constr_name label_decls =
+let exp_of_label_decls ?constr_name ~extensible label_decls =
   (* Some labels may be ignored: *)
   let ignored_labels, not_ignored_labels =
     List.fold_left (fun (ign, not_ign) label_decl ->
@@ -275,11 +280,18 @@ let exp_of_label_decls ?constr_name label_decls =
         Asttypes.Nolabel, ppp_exp_of_core_type label_decl.pld_type ] in
       Exp.apply (exp_of_name "field") params in
   apply2 ">>:" (
-    apply1 "record" (
+    let fields =
       (* For each field, emit a field expression *)
       List.map field_exp_of_label_decl not_ignored_labels |>
       (* Connect all the variants with ||| operator *)
-      list_reduce (apply2 "<->"))
+      list_reduce (apply2 "<->") in
+    Exp.apply (exp_of_name "record")
+              [ Asttypes.Optional "extensible",
+                  if extensible then
+                    exp_of_constr "Some" (Some (exp_of_bool true))
+                  else
+                    exp_of_constr "None" None ;
+                Asttypes.Nolabel, fields ]
   ) (
     (* When the record is part of a constructor we cannot pattern-match the record fields
      * as usual and have to include that constructor with the pattern ; effectively we do
@@ -356,7 +368,7 @@ let variant_exp_of_constructor_decl constructor_decl =
       | Pcstr_tuple lst -> ppp_exp_of_tuple lst
       | Pcstr_record lst ->
         let constr_name = constructor_decl.pcd_name.Asttypes.txt in
-        exp_of_label_decls ~constr_name lst))
+        exp_of_label_decls ~extensible:false ~constr_name lst))
 
 (* Receive [ Some "a"; Some "b"; None ] and returns the pattern for
  * Some (Some a, Some b), _ *)
@@ -504,15 +516,21 @@ let exp_of_constructor_arguments constructor_decls =
           }) constructor_decls)) ]))
 
 let ppp_of_type_declaration tdec =
-  match extract_ident_attribute "ppp" tdec.ptype_attributes with
-  | None -> (* don't care *)
+  match extract_ident_attribute tdec.ptype_attributes with
+  | None, false, _ -> (* don't care *)
     tdec, None
-  | Some (impl_mod, attrs) ->
-    let replacement = { tdec with ptype_attributes = attrs } in
+  | None, true, _ -> (* a bit weird *)
+    Printf.eprintf "Used ppp_extensible but no PPP module given.\n%!" ;
+    tdec, None
+  | Some impl_mod, extensible, other_attrs ->
+    let replacement = { tdec with ptype_attributes = other_attrs } in
     replacement, (match tdec.ptype_manifest with
     | None ->
       (match tdec.ptype_kind with
       | Ptype_variant constructor_decls ->
+        if extensible then
+          Printf.eprintf "Used ppp_extensible on a variant but only \
+                          records are extensible.\n%!" ;
         Some (
           value_binding_of_expr
             (name_of_ppp tdec.ptype_name.Asttypes.txt)
@@ -523,10 +541,13 @@ let ppp_of_type_declaration tdec =
           value_binding_of_expr
             (name_of_ppp tdec.ptype_name.Asttypes.txt)
             (Exp.open_ Asttypes.Override impl_mod
-              (exp_of_label_decls label_decls)))
+              (exp_of_label_decls ~extensible label_decls)))
       | _ -> (* Nope *)
         None)
     | Some core_type ->
+      if extensible then
+        Printf.eprintf "Used ppp_extensible on a primitive type but only \
+                        records are extensible.\n%!" ;
       Some (
         value_binding_of_expr
           (name_of_ppp tdec.ptype_name.Asttypes.txt)
