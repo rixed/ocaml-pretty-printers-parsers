@@ -43,6 +43,8 @@ type j5 = int list [@@ppp PPP_JSON]
 
 type j6_extens = { mandatory : int ; optional : string [@ppp_default "default"] } [@@ppp PPP_JSON] [@@ppp_extensible]
 
+type j7_rename = { foo : int [@ppp_rename "bar"] ; bar : string [@ppp_rename "baz"] } [@@ppp PPP_JSON]
+
 type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON]
 type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON]
 
@@ -85,6 +87,8 @@ let () =
   (* Check it's OK to have more fields than declared: *)
   test_string_conv j6_extens_ppp "{\"mandatory\":1, \"extra\": [1,2,3]}" ;
   test_string_conv j6_extens_ppp "{\"optional\" : \"present\" , \"extra\" : { \"foo\":42 }, \"mandatory\":1 }" ;
+  (* Check field renaming *)
+  test_string_conv j7_rename_ppp "{ \"bar\":42, \"baz\":\"glop\" }" ;
   test_string_conv arrt_ppp "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }" ;
   test_string_conv arrt_ppp "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }" ;
   test_string_conv export_msg_ppp "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}" ;
