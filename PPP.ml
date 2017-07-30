@@ -5,6 +5,28 @@ exception CannotBacktrackThatFar
 exception IntegerOverflow
 exception MissingRequiredField (* used by ppx *)
 
+type error_type = CannotParse of string
+                | UnknownField of string * int (* end of value *)
+                | NotDone of string
+type error = int * error_type
+
+let parse_error o s = Error (o, CannotParse s)
+let unknown_field o1 o2 n = Error (o1, UnknownField (n, o2))
+let not_done o s = Error (o, NotDone s)
+
+let string_of_error (o, e) =
+  match e with
+  | CannotParse s -> "Parse error at "^ string_of_int o ^": "^ s
+  | UnknownField (f, _) -> "Unknown field '"^ f ^"' at "^ string_of_int o
+  | NotDone s -> "Was expecting "^ s ^" at end of input"
+
+let best_error e1 e2 =
+  match e1, e2 with
+  | (_, UnknownField _), _ -> e1
+  | _, (_, UnknownField _) -> e2
+  | (o1, _), (o2, _) ->
+    if o1 >= o2 then e1 else e2
+
 (* Some helpers: *)
 
 let is_letter c = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
@@ -65,7 +87,7 @@ let may f = function None -> () | Some x -> f x
 type writer = string -> unit
 type reader = int -> int -> string
 type 'a printer = writer -> 'a -> unit
-type 'a scanner = reader -> int -> ('a * int) option
+type 'a scanner = reader -> int -> (('a * int), error) result
 type 'a t = { printer : 'a printer ;
               scanner : 'a scanner ;
               descr : string }
@@ -97,16 +119,14 @@ exception ParseError (* TODO: an error message would be useful *)
 let of_string_exc ppp s =
   let s = chop s in
   match of_string ppp s 0 with
-  | None -> raise ParseError
-  | Some (_, l) when l < String.length s -> raise ParseError
-  | Some (x, _) -> x
+  | Error _ -> raise ParseError
+  | Ok (_, l) when l < String.length s -> raise ParseError
+  | Ok (x, _) -> x
 
+(* TODO: get rid of that one *)
 let of_string_res ppp s =
   let s = chop s in
-  match of_string ppp s 0 with
-  | None -> Error ()
-  | Some (_, l) when l < String.length s -> Error ()
-  | Some (x, _) -> Ok x
+  of_string ppp s 0
 
 (* We want to allow non-seekable channels therefore we must keep a short
  * past-buffer in case the scanners wants to rollback a bit: *)
@@ -194,13 +214,14 @@ let char quote : char t =
   { printer = (fun o v -> o quote ; o (String.make 1 v) ; o quote) ;
     scanner = (fun i o ->
       let ql = String.length quote in
-      if i o ql <> quote then None else
+      if i o ql <> quote then parse_error o "missing opening quote" else
       let o = o + ql in
       match i o 1 with
-      | "" -> None
+      | "" -> not_done o "character"
       | s ->
         let o = o + 1 in
-        if i o ql <> quote then None else Some (s.[0], o+ql)) ;
+        if i o ql <> quote then parse_error o "missing closing quote" else
+        Ok (s.[0], o+ql)) ;
     descr = "char" }
 
 (* C-like strings. Format: "..." *)
@@ -213,7 +234,7 @@ let string : string t =
         | First, "\"" -> loop (o+1) l s bsn Char
         | Char, "\\" -> loop (o+1) l s bsn BackslashStart
         | Char, "\"" -> (* The only successful termination *)
-          Some (string_of l s, o+1)
+          Ok (string_of l s, o+1)
         | Char, d when String.length d > 0 ->
             loop (o+1) (d.[0]::l) (s+1) bsn Char
         | BackslashStart, "\\" -> loop (o+1) ('\\'::l) (s+1) bsn Char
@@ -229,13 +250,13 @@ let string : string t =
         | Backslash, d when str_is_digit d ->
             if bsn >= 100 then ( (* we already had 2 digits *)
               let bsn = (bsn - 100) * 10 + digit_of d in
-              if bsn > 255 then None
+              if bsn > 255 then parse_error o "invalid backslash sequence in string"
               else loop (o+1) (Char.chr bsn :: l) (s+1) 0 Char
             ) else (
               (* 10+ so that we know when we have had 3 digits: *)
               loop (o+1) l s (10*bsn + digit_of d) Backslash
             )
-        | _ -> None (* everything else is game-over *)
+        | _ -> parse_error o "invalid character in string" (* everything else is game-over *)
       in
       loop o [] 0 0 First) ;
     descr = "string" }
@@ -244,10 +265,10 @@ let string : string t =
    "\"\"" (to_string string "")
    "\"\\207\"" (to_string string "\207")
  *)
-(*$= string & ~printer:(function None -> "" | Some (s, i) -> Printf.sprintf "(%s, %d)" s i)
-  (Some ("glop", 6)) (of_string string "\"glop\"" 0)
-  (Some ("gl\bop\n", 10)) (of_string string "\"gl\\bop\\n\"" 0)
-  (Some ("\207", 6)) (of_string string "\"\\207\"" 0)
+(*$= string & ~printer:(function Error e -> string_of_error e | Ok (s, i) -> Printf.sprintf "(%s, %d)" s i)
+  (Ok ("glop", 6)) (of_string string "\"glop\"" 0)
+  (Ok ("gl\bop\n", 10)) (of_string string "\"gl\\bop\\n\"" 0)
+  (Ok ("\207", 6)) (of_string string "\"\\207\"" 0)
  *)
 
 (* C-like identifiers. Start with a letter of underscore, then can contain digits. *)
@@ -264,13 +285,16 @@ let identifier =
           oo
       in
       let oo = loop o in
-      if oo > o then Some (i o (oo-o), oo) else None) ;
+      if oo > o then Ok (i o (oo-o), oo) else parse_error o "identifier") ;
     descr = "identifier" }
-(*$= identifier & ~printer:(function None -> "" | Some (i, o) -> Printf.sprintf "(%s,%d)" i o)
-  (Some ("glop", 4)) (of_string identifier "glop" 0)
-  (Some ("glop", 4)) (of_string identifier "glop\n" 0)
-  (Some ("glop0", 5)) (of_string identifier "glop0" 0)
-  None (of_string identifier "0glop" 0)
+(*$= identifier & ~printer:(function Error e -> string_of_error e | Ok (i, o) -> Printf.sprintf "(%s,%d)" i o)
+  (Ok ("glop", 4)) (of_string identifier "glop" 0)
+  (Ok ("glop", 4)) (of_string identifier "glop\n" 0)
+  (Ok ("glop0", 5)) (of_string identifier "glop0" 0)
+*)
+(*$inject let is_error = function Error _ -> true | _ -> false *)
+(*$T identifier
+  is_error (of_string identifier "0glop" 0)
  *)
 
 let next_word_eq w i o =
@@ -341,26 +365,26 @@ let seq name opn cls sep fold of_rev_list ppp =
         if stream_starts_with i o sep then
           parse_item prev (o + String.length sep)
         else if stream_starts_with i o cls then
-          Some (of_rev_list prev, o + String.length cls)
-        else None
+          Ok (of_rev_list prev, o + String.length cls)
+        else parse_error o (Printf.sprintf "Cannot find separator %S" sep)
       and parse_item prev o =
         let o = skip_blanks i o in
         match ppp.scanner i o with
-        | Some (x, o) -> parse_sep (x::prev) o
-        | None ->
+        | Ok (x, o) -> parse_sep (x::prev) o
+        | Error _ as err ->
           if stream_starts_with i o cls then
-            Some (of_rev_list prev, o + String.length cls)
-          else None
+            Ok (of_rev_list prev, o + String.length cls)
+          else err
       in
       let o = skip_blanks i o in
       if stream_starts_with i o opn then
         parse_item [] (o + String.length opn)
-      else None) ;
+      else parse_error o (Printf.sprintf "Cannot find sequence opening %S" opn)) ;
     descr = name ^" of "^ ppp.descr }
-(*$= seq & ~printer:(function None -> "" | Some (l,o) -> Printf.sprintf "(%s, %d)" (String.concat ";" l) o)
-  (Some (["a";"b";"cde"], 9)) \
+(*$= seq & ~printer:(function Error e -> string_of_error e | Ok (l,o) -> Printf.sprintf "(%s, %d)" (String.concat ";" l) o)
+  (Ok (["a";"b";"cde"], 9)) \
     (of_string (seq "list" "[" "]" ";" List.fold_left List.rev identifier) "[a;b;cde]" 0)
-  (Some (["a";"b";"cde"], 9)) \
+  (Ok (["a";"b";"cde"], 9)) \
     (of_string (seq "sequence" "" "" "--" List.fold_left List.rev identifier) "a--b--cde" 0)
  *)
 
@@ -370,11 +394,11 @@ let (++) ppp1 ppp2 =
       ppp2.printer o v2) ;
     scanner = (fun i o ->
       match ppp1.scanner i o with
-      | None -> None
-      | Some (v1, o) ->
+      | Error _ as e -> e
+      | Ok (v1, o) ->
         (match ppp2.scanner i o with
-        | None -> None
-        | Some (v2, o) -> Some ((v1, v2), o))) ;
+        | Error _ as e -> e
+        | Ok (v2, o) -> Ok ((v1, v2), o))) ;
     descr = ppp1.descr ^ ppp2.descr }
 
 let (-+) ppp1 ppp2 =
@@ -383,8 +407,8 @@ let (-+) ppp1 ppp2 =
       ppp2.printer o v2) ;
     scanner = (fun i o ->
       match ppp1.scanner i o with
-      | None -> None
-      | Some ((), o) -> ppp2.scanner i o) ;
+      | Error _ as e -> e
+      | Ok ((), o) -> ppp2.scanner i o) ;
     descr = ppp1.descr ^ ppp2.descr }
 
 let (+-) ppp1 ppp2 =
@@ -393,11 +417,11 @@ let (+-) ppp1 ppp2 =
       ppp2.printer o ()) ;
     scanner = (fun i o ->
       match ppp1.scanner i o with
-      | None -> None
-      | Some (v, o) ->
+      | Error _ as e-> e
+      | Ok (v, o) ->
         (match ppp2.scanner i o with
-        | None -> None
-        | Some (_, o) -> Some (v, o))) ;
+        | Error _ as e -> e
+        | Ok (_, o) -> Ok (v, o))) ;
     descr = ppp1.descr ^ ppp2.descr }
 
 let (--) ppp1 ppp2 =
@@ -406,19 +430,19 @@ let (--) ppp1 ppp2 =
       ppp2.printer o ()) ;
     scanner = (fun i o ->
       match ppp1.scanner i o with
-      | None -> None
-      | Some ((), o) ->
+      | Error _ as e -> e
+      | Ok ((), o) ->
         (match ppp2.scanner i o with
-        | None -> None
-        | Some (_, o) -> Some ((), o))) ;
+        | Error _ as e -> e
+        | Ok (_, o) -> Ok ((), o))) ;
     descr = ppp1.descr ^ ppp2.descr }
 
 let (>>:) ppp (f,f') =
   { printer = (fun o v -> ppp.printer o (f v)) ;
     scanner = (fun i o ->
       match ppp.scanner i o with
-      | None -> None
-      | Some (x,o) -> Some (f' x, o)) ;
+      | Error _ as e -> e
+      | Ok (x,o) -> Ok (f' x, o)) ;
     descr = ppp.descr }
 
 (* Always allow blanks around the constant *)
@@ -429,27 +453,27 @@ let cst s =
       let l = String.length s in
       if stream_starts_with i o s then
         let o = skip_blanks i (o + l) in
-        Some ((), o)
-      else None) ;
+        Ok ((), o)
+      else parse_error o (Printf.sprintf "Cannot find %S" s)) ;
     descr = s }
 
 let bool : bool t =
   { printer = (fun o v -> o (if v then "true" else "false")) ;
     scanner = (fun i o ->
       match next_word_eq "true" i o with
-      | true, _ as x -> Some x
+      | true, _ as x -> Ok x
       | _ ->
         (match next_word_eq "false" i o with
-        | true, o -> Some (false, o)
-        | _ -> None)) ;
+        | true, o -> Ok (false, o)
+        | _ -> parse_error o "Expected boolean")) ;
     descr = "boolean" }
 (*$= bool & ~printer:id
   "true" (to_string bool true)
   "false" (to_string bool false)
  *)
 (*$= bool
-  (Some (true, 4)) (of_string bool "true" 0)
-  (Some (false, 5)) (of_string bool "false" 0)
+  (Ok (true, 4)) (of_string bool "true" 0)
+  (Ok (false, 5)) (of_string bool "false" 0)
 *)
 
 (* Int syntax is generic enough: *)
@@ -469,7 +493,7 @@ let generic_int_scanner of_int add mul zero neg i o =
   in
   let oo, s, n = loop o o 1 zero IntStart in
   let n = if s < 0 then neg n else n in
-  if oo > o then Some (n, oo) else None
+  if oo > o then Ok (n, oo) else parse_error o "Expected integer"
 
 let int128 : int128 t =
   { printer = (fun o v -> o (Int128.to_string v)) ;
@@ -560,15 +584,17 @@ let int : int t =
   "-42" (to_string int (-42))
   "0" (to_string int 0)
  *)
-(*$= int & ~printer:(function None -> "" | Some (v,i) -> Printf.sprintf "(%d, %d)" v i)
-  (Some (42, 2)) (of_string int "42" 0)
-  (Some (-42, 3)) (of_string int "-42" 0)
-  (Some (0, 1)) (of_string int "0" 0)
-  (Some (5, 1)) (of_string int "5glop" 0)
-  (Some (0, 2)) (of_string int "+0" 0)
-  (Some (0, 2)) (of_string int "-0" 0)
-  None (of_string int "-glop" 0)
-  None (of_string int "+glop" 0)
+(*$= int & ~printer:(function Error e -> string_of_error e | Ok (v,i) -> Printf.sprintf "(%d, %d)" v i)
+  (Ok (42, 2)) (of_string int "42" 0)
+  (Ok (-42, 3)) (of_string int "-42" 0)
+  (Ok (0, 1)) (of_string int "0" 0)
+  (Ok (5, 1)) (of_string int "5glop" 0)
+  (Ok (0, 2)) (of_string int "+0" 0)
+  (Ok (0, 2)) (of_string int "-0" 0)
+ *)
+(*$T int
+  is_error (of_string int "-glop" 0)
+  is_error (of_string int "+glop" 0)
  *)
 
 (* Some languages (JSON...) forbids "42." but want "42.0" while all accept "42.0" *)
@@ -602,16 +628,16 @@ let float nan inf : float t =
         | _ -> oo, s, n, sc, es, exp
       in
       if stream_starts_with i o nan then
-        Some (Pervasives.nan, o + String.length nan)
+        Ok (Pervasives.nan, o + String.length nan)
       else if stream_starts_with i o inf then
-        Some (infinity, o + String.length inf)
+        Ok (infinity, o + String.length inf)
       else if stream_starts_with i o ("-"^ inf) then
-        Some (neg_infinity, o + 1 + String.length inf)
+        Ok (neg_infinity, o + 1 + String.length inf)
       else (
         let oo, s, n, sc, es, exp = loop o o 1 0 0 1 0 IntStart in
-        if oo > o then Some (
+        if oo > o then Ok (
             float_of_int (s * n) *. 10. ** float_of_int (es * exp - sc), oo)
-        else None
+        else parse_error o "Expected floating number"
       )) ;
     descr = "float" }
 (*$= float & ~printer:id
@@ -620,26 +646,28 @@ let float nan inf : float t =
   "inf" (to_string (float "nan" "inf") infinity)
   "-inf" (to_string (float "nan" "inf") neg_infinity)
  *)
-(*$= float & ~printer:(function None -> "" | Some (f,i) -> Printf.sprintf "(%f, %d)" f i)
-  (Some (3.14, 4)) (of_string (float "nan" "inf") "3.14" 0)
-  (Some (3.14, 6)) (of_string (float "nan" "inf") "314e-2" 0)
-  (Some (3.14, 8)) (of_string (float "nan" "inf") "0.0314E2" 0)
-  (Some (~-.3.14, 9)) (of_string (float "nan" "inf") "-0.0314E2" 0)
-  (Some (42., 2)) (of_string (float "nan" "inf") "42" 0)
-  (Some (~-.42., 3)) (of_string (float "nan" "inf") "-42" 0)
-  (Some (42., 3)) (of_string (float "nan" "inf") "42." 0)
-  (Some (~-.42., 4)) (of_string (float "nan" "inf") "-42." 0)
-  (Some (42., 5)) (of_string (float "nan" "inf") "+42e0" 0)
-  (Some (42., 6)) (of_string (float "nan" "inf") "+42.e0" 0)
-  (Some (42., 7)) (of_string (float "nan" "inf") "+42.0e0" 0)
-  None (of_string (float "nan" "inf") "glop" 0)
-  None (of_string (float "nan" "inf") "+glop" 0)
-  None (of_string (float "nan" "inf") "-glop" 0)
-  (Some (1., 1)) (of_string (float "nan" "inf") "1e" 0)
-  (Some (-0.00010348413604, 17)) \
+(*$= float & ~printer:(function Error e -> string_of_error e | Ok (f,i) -> Printf.sprintf "(%f, %d)" f i)
+  (Ok (3.14, 4)) (of_string (float "nan" "inf") "3.14" 0)
+  (Ok (3.14, 6)) (of_string (float "nan" "inf") "314e-2" 0)
+  (Ok (3.14, 8)) (of_string (float "nan" "inf") "0.0314E2" 0)
+  (Ok (~-.3.14, 9)) (of_string (float "nan" "inf") "-0.0314E2" 0)
+  (Ok (42., 2)) (of_string (float "nan" "inf") "42" 0)
+  (Ok (~-.42., 3)) (of_string (float "nan" "inf") "-42" 0)
+  (Ok (42., 3)) (of_string (float "nan" "inf") "42." 0)
+  (Ok (~-.42., 4)) (of_string (float "nan" "inf") "-42." 0)
+  (Ok (42., 5)) (of_string (float "nan" "inf") "+42e0" 0)
+  (Ok (42., 6)) (of_string (float "nan" "inf") "+42.e0" 0)
+  (Ok (42., 7)) (of_string (float "nan" "inf") "+42.0e0" 0)
+  (Ok (1., 1)) (of_string (float "nan" "inf") "1e" 0)
+  (Ok (-0.00010348413604, 17)) \
     (of_string (float "nan" "inf") "-0.00010348413604" 0)
-  (Some (infinity, 3)) (of_string (float "nan" "inf") "inf" 0)
-  (Some (neg_infinity, 4)) (of_string (float "nan" "inf") "-inf" 0)
+  (Ok (infinity, 3)) (of_string (float "nan" "inf") "inf" 0)
+  (Ok (neg_infinity, 4)) (of_string (float "nan" "inf") "-inf" 0)
+ *)
+(*$T float
+  is_error (of_string (float "nan" "inf") "glop" 0)
+  is_error (of_string (float "nan" "inf") "+glop" 0)
+  is_error (of_string (float "nan" "inf") "-glop" 0)
  *)
 
 let option ?placeholder ppp =
@@ -649,36 +677,38 @@ let option ?placeholder ppp =
                                | Some x -> ppp.printer o x) ;
     scanner = (fun i o ->
       match ppp.scanner i o with
-      | Some (x, o') -> Some (Some x, o')
-      | None ->
+      | Ok (x, o') -> Ok (Some x, o')
+      | Error _ as err ->
         (match placeholder with
-        | None -> Some (None, o)
+        | None -> Ok (None, o)
         | Some p ->
           (match p.scanner i o with
-          | Some (_, o') -> Some (None, o')
-          | None -> None))) ;
+          | Ok (_, o') -> Ok (None, o')
+          | Error _ -> err))) ;
     descr =
       match placeholder with
       | None -> "optional "^ ppp.descr
       | Some p -> ppp.descr ^" or "^ p.descr }
-(*$= option & ~printer:(function None -> "" | Some (None, _) -> Printf.sprintf "none" | Some (Some d, o) -> Printf.sprintf "(%d, %d)" d o)
-  (Some (Some 42,4)) (of_string (option (cst "{" -+ int +- cst "}")) "{42}" 0)
-  (Some (None,0))    (of_string (option (cst "{" -+ int +- cst "}")) "pas glop" 0)
-  (Some (Some 42,4)) (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "{42}" 0)
-  (Some (None,4))    (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "nope" 0)
-  None               (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "pas glop" 0)
+(*$= option & ~printer:(function Error e -> string_of_error e | Ok (None, _) -> Printf.sprintf "none" | Ok (Some d, o) -> Printf.sprintf "(%d, %d)" d o)
+  (Ok (Some 42,4)) (of_string (option (cst "{" -+ int +- cst "}")) "{42}" 0)
+  (Ok (None,0))    (of_string (option (cst "{" -+ int +- cst "}")) "pas glop" 0)
+  (Ok (Some 42,4)) (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "{42}" 0)
+  (Ok (None,4))    (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "nope" 0)
+ *)
+(*$T option
+  is_error (of_string (option ~placeholder:(cst "nope") (cst "{" -+ int +- cst "}")) "pas glop" 0)
  *)
 
 let default v ppp =
   { printer = ppp.printer ;
     scanner = (fun i o ->
       match ppp.scanner i o with
-        | None -> Some (v, o)
+        | Error _ -> Ok (v, o)
         | x -> x) ;
     descr = ppp.descr }
-(*$= default & ~printer:(function None -> "" | Some (d, o) -> Printf.sprintf "(%d, %d)" d o)
-  (Some (42,4)) (of_string (default 17 (cst "{" -+ int +- cst "}")) "{42}" 0)
-  (Some (17,0)) (of_string (default 17 (cst "{" -+ int +- cst "}")) "pas glop" 0)
+(*$= default & ~printer:(function Error e -> string_of_error e | Ok (d, o) -> Printf.sprintf "(%d, %d)" d o)
+  (Ok (42,4)) (of_string (default 17 (cst "{" -+ int +- cst "}")) "{42}" 0)
+  (Ok (17,0)) (of_string (default 17 (cst "{" -+ int +- cst "}")) "pas glop" 0)
  *)
 
 (* Generic record/union like facility *)
@@ -817,18 +847,19 @@ type 'a u =
   (string t -> bool -> 'a printer) *    (* name ppp, bool is: do we need a separator? *)
   (string -> 'a scanner) *  (* string is: field value that's going to be read *)
   string                    (* how to build the type name *)
+
 let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
   { printer = (fun o x ->
       o opn ;
       p name_ppp false o x ;
       o cls) ;
-    scanner = (fun i o ->
+    scanner = (fun i union_start ->
       let opn_len = String.length opn
       and cls_len = String.length cls in
 
-      (* There could be some grouping, skip it (unless that's our openeing). *)
+      (* There could be some grouping, skip it (unless that's our opening). *)
       let groupings' = List.filter (fun (o, _) -> o <> opn) groupings in
-      let opened, o = skip_opened_groups groupings' i o in
+      let opened, o = skip_opened_groups groupings' i union_start in
       debug stderr "union: found %d opened groups\n%!" (List.length opened) ;
       let o = skip_blanks i o in
       match i o opn_len with
@@ -837,8 +868,8 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
         let o = o + opn_len in
         let o = skip_blanks i o in
         (match name_ppp.scanner i o with
-        | None -> None
-        | Some (name, o') ->
+        | Error _ as e -> e
+        | Ok (name, o') ->
           debug stderr "union: found union name %S\n%!" name ;
           (* Now skip the eq sign *)
           let o' = skip_blanks i o' in
@@ -846,17 +877,17 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
           (match i o' eq_len with
           | e when e = eq ->
             debug stderr "union: found eq %S\n%!" eq ;
-            let o' = skip_blanks i (o' + eq_len) in
+            let value_start = skip_blanks i (o' + eq_len) in
             (* Now the value *)
             let delims' = if cls_len > 0 then cls::delims else delims in
-            (match skip_any groupings delims' i o' with
-            | None -> None
-            | Some o ->
-              debug stderr "union: found value, up to o=%d (starting at %d)\n%!" o o' ;
+            (match skip_any groupings delims' i value_start with
+            | None -> parse_error value_start (Printf.sprintf "Cannot delimit value for %S" name)
+            | Some value_stop ->
+              debug stderr "union: found value, up to o=%d (starting at %d)\n%!" value_stop value_start ;
               (* If there were some opened grouping at the beginning, then we
                * must find them closed now: *)
-              (match skip_closed_groups opened i o with
-              | None -> None
+              (match skip_closed_groups opened i value_stop with
+              | None -> parse_error value_stop "Expected closing group"
               | Some o ->
                 debug stderr "union: found closed groupings\n%!" ;
                 let cls_pos = skip_blanks i o in
@@ -864,8 +895,8 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                 (match i cls_pos cls_len with
                 | str when str = cls ->
                   debug stderr "union: found cls %S\n%!" cls ;
-                  let chop_str = i o' (cls_pos - o') in
-                  let value = chop_sub chop_str 0 (cls_pos - o') in
+                  let chop_str = i value_start (cls_pos - value_start) in
+                  let value = chop_sub chop_str 0 (cls_pos - value_start) in
                   debug stderr "union: found value %S\n%!" value ;
                   (* Here we have an issue. We may fail to parse the value in
                    * case of extraneous groupings again. This is a bit annoying
@@ -879,21 +910,26 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                   let rec try_ungroup opened i o =
                     debug stderr "union: trying to parse value for label %S\n%!" name ;
                     match s name i o with
-                    | Some (v, o) ->
+                    | Ok (v, o) ->
                       debug stderr "union: parsed value!\n%!" ;
                       (* If we had to open some groups, check we can now close
                        * them: *)
                       (match skip_closed_groups opened i o with
                       | None ->
                         debug stderr "union: Cannot close %d opened groups around value %S" (List.length opened) value ;
-                        None
-                      | Some oo -> Some (v, oo))
-                    | None ->
-                      debug stderr "union: cannot parse value from %d\n%!" o ;
+                        parse_error o "Expected closing group"
+                      | Some oo -> Ok (v, oo))
+                    | Error r as err ->
+                      debug stderr "union: cannot parse value from %d (%s)\n%!"
+                        o (string_of_error r) ;
                       (match opened_group groupings i o with
                       | None ->
                         debug stderr "union: but this is not a group opening. Game over!\n%!" ;
-                        None
+                        (* If the error was a name error, set the actual end of value: *)
+                        (match r with
+                        | o, UnknownField (n, _) ->
+                          Error (o, UnknownField (n, value_stop))
+                        | _ -> err)
                       | Some (group, o) ->
                         let o = skip_blanks i o in
                         debug stderr "union: retry from %d after the opened group\n%!" o ;
@@ -901,22 +937,23 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                   in
                   let ii = string_reader value in
                   (match try_ungroup [] ii 0 with
-                  | None -> None
-                  | Some (v, oo) -> (* oo is the offset in the value only *)
+                  | Error _ as e -> e
+                  | Ok (v, oo) -> (* oo is the offset in the value only *)
                     let oo = skip_blanks ii oo in
                     (* We should have read everything *)
                     if oo = String.length value then
-                      Some (v, cls_pos + cls_len)
+                      Ok (v, cls_pos + cls_len)
                     else (
                       debug stderr "union: garbage at end of value %S from offset %d\n%!" value oo ;
-                      None
+                      parse_error oo (Printf.sprintf "Garbage at end of value for %S" name)
                     ))
-                | _ -> None)))
-          | _ -> None))
-      | _ -> None) ;
+                | _ -> parse_error cls_pos (Printf.sprintf "Expected closing of union %S" cls))))
+          | _ -> parse_error o' (Printf.sprintf "Expected separator %S" eq)))
+      | _ -> parse_error o (Printf.sprintf "Expected opening of union %S" opn)) ;
     descr }
 
-(* Combine two ppp into a pair of options *)
+(* Combine two ppp into a pair of options. Notice that the most important
+ * error, which is UnknownField, must bubble up so we can ignore it! *)
 let alternative var_sep (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option * 'b option) u =
   (fun name_ppp need_sep o (v1,v2) ->
     may (p1 name_ppp need_sep o) v1 ;
@@ -924,11 +961,11 @@ let alternative var_sep (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option *
     may (p2 name_ppp need_sep o) v2),
   (fun n i o ->
     match s1 n i o with
-    | Some (x, o) -> Some ((Some x, None), o)
-    | None ->
+    | Ok (x, o) -> Ok ((Some x, None), o)
+    | Error e1 ->
       match s2 n i o with
-      | Some (x, o) -> Some ((None, Some x), o)
-      | None -> None),
+      | Ok (x, o) -> Ok ((None, Some x), o)
+      | Error e2 -> Error (best_error e1 e2)),
   (id1 ^ var_sep ^ id2)
 
 let variant eq sep id_sep name (ppp : 'a t) : 'a u =
@@ -938,17 +975,17 @@ let variant eq sep id_sep name (ppp : 'a t) : 'a u =
     o eq ;
     ppp.printer o v),
   (fun n i o ->
-    if n <> name then None else ppp.scanner i o),
+    if n <> name then unknown_field o o name else ppp.scanner i o),
   (if ppp.descr = "" then name else name ^ id_sep ^ ppp.descr)
 
 (* Like unit but with no representation, useful for
  * constructor without arguments *)
 let none : unit t =
   { printer = (fun _o () -> ()) ;
-    scanner = (fun _i o -> Some ((), o)) ;
+    scanner = (fun _i o -> Ok ((), o)) ;
     descr = "" }
 (*$= none
-  (Some ((), 0)) (of_string none "" 0)
+  (Ok ((), 0)) (of_string none "" 0)
  *)
 
 
@@ -983,19 +1020,20 @@ let none : unit t =
   "RGB (0,0,255)" (to_string color (RGB (0, 0, 255)))
   "Transp" (to_string color Transparent)
  *)
-(*$= color & ~printer:(function None -> "" | Some (p, o) -> Printf.sprintf "(%s, %d)" (to_string color p) o)
-  (Some (RGB (0,0,255), 12)) (of_string color "RGB(0,0,255)" 0)
-  (Some (RGB (0,0,255), 13)) (of_string color "RGB (0,0,255)" 0)
-  (Some (RGB (0,0,255), 15)) (of_string color "  RGB (0,0,255)" 0)
-  (Some (RGB (0,0,255), 22)) (of_string color "RGB  ( 0 ,  0, 255  ) " 0)
-  (Some (Transparent, 8)) (of_string color " Transp " 0)
+(*$= color & ~printer:(function Error e -> string_of_error e | Ok (p, o) -> Printf.sprintf "(%s, %d)" (to_string color p) o)
+  (Ok (RGB (0,0,255), 12)) (of_string color "RGB(0,0,255)" 0)
+  (Ok (RGB (0,0,255), 13)) (of_string color "RGB (0,0,255)" 0)
+  (Ok (RGB (0,0,255), 15)) (of_string color "  RGB (0,0,255)" 0)
+  (Ok (RGB (0,0,255), 22)) (of_string color "RGB  ( 0 ,  0, 255  ) " 0)
+  (Ok (Transparent, 8)) (of_string color " Transp " 0)
  *)
 
 (* When using union for building a record, aggregate the tree of pairs at
  * every field.  This merge has to be recursive so we must build the merge
  * function as we build the total tree of pairs with <->. *)
 type 'a merge_u = 'a option -> 'a option -> 'a option
-let record opn cls eq sep groupings delims name_ppp ((p, s, descr : 'a u), (merge : 'a merge_u)) =
+
+let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, descr : 'a u), (merge : 'a merge_u)) =
   (* In a record we assume there are nothing special to open/close a single
    * field. If not, add 2 parameters in the record: *)
   let nf = union "" "" eq groupings (cls::delims) name_ppp (p, s, descr) in
@@ -1004,33 +1042,43 @@ let record opn cls eq sep groupings delims name_ppp ((p, s, descr : 'a u), (merg
       p name_ppp false o v ;
       o cls) ;
     scanner = (fun i o ->
-      let o = skip_blanks i o in
+      let value_start = skip_blanks i o in
       let opn_len = String.length opn in
       let sep_len = String.length sep in
       let cls_len = String.length cls in
-      match i o opn_len with
+      match i value_start opn_len with
       | str when str = opn ->
-        let o = skip_blanks i (o + opn_len) in
+        let o = skip_blanks i (value_start + opn_len) in
         let rec loop prev o =
           match nf.scanner i o with
-          | None -> prev, o
-          | Some (x, o) ->
+          | Error (_, r) ->
+            (match extensible, r with
+            | true, UnknownField (_, o2) ->
+              (* If we got as far as parsing a name and isolating a value
+               * then we can assume the structure is not finished yet. *)
+              next_value prev o2
+            | _ ->
+              (* Maybe it's an error, but maybe we are just done. *)
+              prev, o)
+          | Ok (x, o) ->
             let prev' = merge prev (Some x) in
-            let o = skip_blanks i o in
-            (match i o sep_len with
-            | str when str = sep ->
-              loop prev' (o + sep_len)
-            | _ -> prev', o)
+            next_value prev' o
+        and next_value prev o =
+          let o = skip_blanks i o in
+          (match i o sep_len with
+          | str when str = sep ->
+            loop prev (o + sep_len)
+          | _ -> prev, o)
         in
         let res, o = loop None o in
         (* Check that we are done *)
         let o = skip_blanks i o in
         (match i o cls_len with
         | str when str = cls ->
-          (match res with None -> None
-                        | Some r -> Some (r, o + cls_len))
-        | _ -> None)
-      | _ -> None) ;
+          (match res with None -> parse_error o "empty record"
+                        | Some r -> Ok (r, o + cls_len))
+        | _ -> parse_error o (Printf.sprintf "Was expecting closing of record %S" cls))
+      | _ -> parse_error o (Printf.sprintf "Was expecting opening of record %S" opn)) ;
     descr = opn ^ descr ^ cls }
 
 (* But then we need a special combinator to also compute the merge of the pairs of pairs... *)
@@ -1068,14 +1116,14 @@ let field eq sep id_sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
 (*$= person & ~printer:id
   "{name=\"John\"; age=41; male=true}" (to_string person { name = "John"; age = 41; male = true })
  *)
-(*$= person & ~printer:(function None -> "" | Some (p, o) -> Printf.sprintf "(%s, %d)" (to_string person p) o)
-  (Some ({ name = "John"; age = 41; male = true }, 30)) \
+(*$= person & ~printer:(function Error e -> string_of_error e | Ok (p, o) -> Printf.sprintf "(%s, %d)" (to_string person p) o)
+  (Ok ({ name = "John"; age = 41; male = true }, 30)) \
     (of_string person "{name=\"John\";age=41;male=true}" 0)
-  (Some ({ name = "John"; age = 41; male = true }, 30)) \
+  (Ok ({ name = "John"; age = 41; male = true }, 30)) \
     (of_string person "{age=41;name=\"John\";male=true}" 0)
-  (Some ({ name = "John"; age = 41; male = true }, 39)) \
+  (Ok ({ name = "John"; age = 41; male = true }, 39)) \
     (of_string person " {  age=41 ; name = \"John\" ;male =true}" 0)
-  (Some ({name="John";age=41;male=true}, 28)) \
+  (Ok ({name="John";age=41;male=true}, 28)) \
     (of_string person " { age = 41 ; name = \"John\"}" 0)
  *)
 

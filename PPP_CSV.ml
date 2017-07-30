@@ -11,6 +11,9 @@ let tuple_sep = "|"
 
 let list (ppp : 'a PPP.t) : 'a list PPP.t =
   PPP.seq "list" "" "" tuple_sep List.fold_left List.rev ppp
+(*$= list
+  (Ok ([1;2;3], 6)) (PPP.of_string (list int) "1|2|3\n" 0)
+ *)
 
 let array (ppp : 'a PPP.t) : 'a array PPP.t =
   PPP.seq "array" "" "" tuple_sep Array.fold_left (fun l -> Array.of_list (List.rev l)) ppp

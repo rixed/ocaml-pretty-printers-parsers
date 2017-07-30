@@ -12,7 +12,6 @@ module B = struct
               recursive : t3 list [@ppp_ignore []] } [@@ppp PPP_OCaml]
 
   type t4 = Foo of int | Bar of string * int * bool | Baz [@@ppp PPP_OCaml]
-
 end
 
 type t5 = B.t4 option [@@ppp PPP_OCaml]
@@ -48,8 +47,8 @@ type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp
 let () =
   let mouline ppp str =
     match PPP.of_string ppp str 0 with
-    | Some (x, _) -> PPP.to_string ppp x
-    | None -> "Parse error" in
+    | Ok (x, _) -> PPP.to_string ppp x
+    | Error e -> PPP.string_of_error e in
   let test_string_conv ppp s =
     Printf.printf "%s: %s\n" ppp.PPP.descr (mouline ppp s) in
   test_string_conv t6_ppp "Glop { a = 42 ; b = None }" ;

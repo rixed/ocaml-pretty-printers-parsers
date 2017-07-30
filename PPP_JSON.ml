@@ -7,7 +7,7 @@ include PPP.Ops
 
 let unit : unit PPP.t = cst "null"
 (*$= unit
-  (Some ((), 4)) (of_string unit "null" 0)
+  (Ok ((), 4)) (of_string unit "null" 0)
  *)
 
 let char = PPP.char "\""
@@ -71,11 +71,11 @@ let result ok_ppp err_ppp = union (
   let test_id p x =
     let s = to_string p x in
     match of_string p s 0 with
-    | Some (x',_) -> if x = x' then true else (Printf.printf "intermediary string: %S\n" s; false)
+    | Ok (x',_) -> if x = x' then true else (Printf.printf "intermediary string: %S\n" s; false)
     | _ -> false
   let test_id_float x =
     match of_string float (to_string float x) 0 with
-    | Some (x',_) -> abs_float (x -. x') <= 1e-5
+    | Ok (x',_) -> abs_float (x -. x') <= 1e-5
     | _ -> false
 *)
 (*$Q & ~count:10

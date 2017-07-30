@@ -5,11 +5,15 @@ include PPP.Ops
   let id x = x
   let of_string = PPP.of_string
   let to_string = PPP.to_string
+  let printer_of_ppp ppp = function
+    | Error e -> PPP.string_of_error e
+    | Ok (x, l) ->
+      Printf.sprintf "Some(%s, %d)" (to_string ppp x) l
  *)
 
 let unit = cst "()"
-(*$= unit
-  (Some ((), 2)) (of_string unit "()" 0)
+(*$= unit & ~printer:(printer_of_ppp unit)
+  (Ok ((), 2)) (of_string unit "()" 0)
  *)
 
 let char = PPP.char "'"
@@ -22,9 +26,9 @@ let list (ppp : 'a PPP.t) : 'a list PPP.t =
    "[]" (to_string (list int) [])
    "[1;2;3]" (to_string (list int) [1;2;3])
  *)
-(*$= list & ~printer:(function None -> "" | Some (l, i) -> Printf.sprintf "([%s], %d)" (List.fold_left (fun p i -> p ^(if p <> "" then ";" else "")^ string_of_int i) "" l) i)
-  (Some ([], 2)) (of_string (list int) "[]" 0)
-  (Some ([1;2;3], 7)) (of_string (list int) "[1;2;3]" 0)
+(*$= list & ~printer:(printer_of_ppp (list int))
+  (Ok ([], 2)) (of_string (list int) "[]" 0)
+  (Ok ([1;2;3], 7)) (of_string (list int) "[1;2;3]" 0)
  *)
 
 let array (ppp : 'a PPP.t) : 'a array PPP.t =
@@ -33,9 +37,9 @@ let array (ppp : 'a PPP.t) : 'a array PPP.t =
    "[||]" (to_string (array string) [||])
    "[|\"[\";\"|\";\";\"|]" (to_string (array string) [| "["; "|"; ";" |])
  *)
-(*$= array & ~printer:(function None -> "" | Some (a, i) -> Printf.sprintf "([|%s|], %d)" (Array.fold_left (fun p i -> Printf.sprintf "%s%s%S" p (if p <> "" then ";" else "") i) "" a) i)
-  (Some ([||], 4)) (of_string (array string) "[||]" 0)
-  (Some ([| "1" ; "2" |], 11)) (of_string (array string) "[|\"1\";\"2\"|]" 0)
+(*$= array & ~printer:(printer_of_ppp (array string))
+  (Ok ([||], 4)) (of_string (array string) "[||]" 0)
+  (Ok ([| "1" ; "2" |], 11)) (of_string (array string) "[|\"1\";\"2\"|]" 0)
  *)
 
 let tuple_open = "("
@@ -72,10 +76,10 @@ let pair = Tuple.tuple2
    "(\"a\",2)" (to_string (pair string int) ("a", 2))
    "[|([],true)|]" (to_string (array (pair (list int) bool)) [|([],true)|])
  *)
-(*$= pair & ~printer:(function None -> "" | Some ((v1,v2), i) -> Printf.sprintf "((%d,%S), %d)" v1 v2 i)
-  (Some ((1,"a"), 7)) (of_string (pair int string) "(1,\"a\")" 0)
-  (Some ((0,""), 6)) (of_string (pair int string) "(0,\"\")" 0)
-  (Some ((0,""), 7)) (of_string (pair int string) "(0, \"\")" 0)
+(*$= pair & ~printer:(printer_of_ppp (pair int string))
+  (Ok ((1,"a"), 7)) (of_string (pair int string) "(1,\"a\")" 0)
+  (Ok ((0,""), 6)) (of_string (pair int string) "(0,\"\")" 0)
+  (Ok ((0,""), 7)) (of_string (pair int string) "(0, \"\")" 0)
  *)
 
 let triple = Tuple.tuple3
@@ -83,9 +87,9 @@ let triple = Tuple.tuple3
    "(1,2.1,\"a\")" (to_string (triple int float string) (1, 2.1, "a"))
    "(1,(1,2),3)" (to_string (triple int (pair int int) int) (1, (1,2), 3))
  *)
-(*$= triple & ~printer:(function None -> "" | Some ((v1,v2,v3), i) -> Printf.sprintf "((%d,%S,%d), %d)" v1 v2 v3 i)
-  (Some ((1,"a",1), 9)) (of_string (triple int string int) "(1,\"a\",1)" 0)
-  (Some ((0,"",0), 8)) (of_string (triple int string int) "(0,\"\",0)" 0)
+(*$= triple & ~printer:(printer_of_ppp (triple int string int))
+  (Ok ((1,"a",1), 9)) (of_string (triple int string int) "(1,\"a\",1)" 0)
+  (Ok ((0,"",0), 8)) (of_string (triple int string int) "(0,\"\",0)" 0)
  *)
 
 let groupings = [ "{","}" ; "[","]" ; "(",")" ; "[|","|]" ; "begin","end" ]
@@ -107,15 +111,9 @@ let result ok_ppp err_ppp = union (
    (function Some x, _-> Ok x
            | _, Some e -> Error e
            | _ -> assert false))
-(*$inject
-  let printer_of_ppp ppp = function
-    | None -> "None"
-    | Some (x, l) ->
-      Printf.sprintf "Some(%s, %d)" (to_string ppp x) l
- *)
 (*$= result & ~printer:(printer_of_ppp (result int string))
-  (Some (Error "test", 10)) (of_string (result int string) "Err \"test\"" 0)
-  (Some (Ok 42, 5)) (of_string (result int string) "Ok 42" 0)
+  (Ok (Error "test", 10)) (of_string (result int string) "Err \"test\"" 0)
+  (Ok (Ok 42, 5)) (of_string (result int string) "Ok 42" 0)
  *)
 
 let option ppp = union (
@@ -127,30 +125,30 @@ let option ppp = union (
            | None, _ -> None))
 
 (*$= option & ~printer:(printer_of_ppp (option int))
-  (Some (Some 3, 6)) \
+  (Ok (Some 3, 6)) \
     (let ppp = option int in let s = Some 3 |> to_string ppp in of_string ppp s 0)
-  (Some (None, 5)) \
+  (Ok (None, 5)) \
     (let ppp = option int in let s = None   |> to_string ppp in of_string ppp s 0)
-  (Some (Some 42, 7)) (of_string (option int) "Some 42" 0)
-  (Some (Some 42, 9)) (of_string (option int) "Some (42)" 0)
+  (Ok (Some 42, 7)) (of_string (option int) "Some 42" 0)
+  (Ok (Some 42, 9)) (of_string (option int) "Some (42)" 0)
  *)
 (*$= option & ~printer:(printer_of_ppp (option (option int)))
-  (Some (Some None, 9)) (of_string (option (option int)) "Some None" 0)
-  (Some (Some None, 11)) (of_string (option (option int)) "Some (None)" 0)
-  (Some (Some None, 10)) (of_string (option (option int)) "Some(None)" 0)
-  (Some (Some (Some 42), 14)) (of_string (option (option int)) "Some (Some 42)" 0)
-  (Some (Some (Some 42), 16)) (of_string (option (option int)) "Some (Some (42))" 0)
+  (Ok (Some None, 9)) (of_string (option (option int)) "Some None" 0)
+  (Ok (Some None, 11)) (of_string (option (option int)) "Some (None)" 0)
+  (Ok (Some None, 10)) (of_string (option (option int)) "Some(None)" 0)
+  (Ok (Some (Some 42), 14)) (of_string (option (option int)) "Some (Some 42)" 0)
+  (Ok (Some (Some 42), 16)) (of_string (option (option int)) "Some (Some (42))" 0)
  *)
 
 (*$inject
   let test_id p x =
     let s = to_string p x in
     match of_string p s 0 with
-    | Some (x',_) -> if x = x' then true else (Printf.printf "intermediary string: %S\n" s; false)
+    | Ok (x',_) -> if x = x' then true else (Printf.printf "intermediary string: %S\n" s; false)
     | _ -> false
   let test_id_float x =
     match of_string float (to_string float x) 0 with
-    | Some (x',_) -> abs_float (x -. x') <= 1e-5
+    | Ok (x',_) -> abs_float (x -. x') <= 1e-5
     | _ -> false
 *)
 (*$Q & ~count:10
@@ -176,8 +174,8 @@ let option ppp = union (
   let test_none_ppp = list test_var_ppp
  *)
  (*$= test_none_ppp & ~printer:(printer_of_ppp test_none_ppp)
-   (Some ([A], 3)) (of_string test_none_ppp "[A]" 0)
-   (Some ([A; B], 6)) (of_string test_none_ppp "[A; B]" 0)
+   (Ok ([A], 3)) (of_string test_none_ppp "[A]" 0)
+   (Ok ([A; B], 6)) (of_string test_none_ppp "[A; B]" 0)
   *)
 
   (* Some non-regression tests *)
@@ -189,9 +187,9 @@ let option ppp = union (
       (fun (x,y) -> Bar (x,y)))
  *)
 (*$= string_first_ppp & ~printer:(printer_of_ppp string_first_ppp)
-   (Some (Bar ("bla", 42), 13)) (of_string string_first_ppp "Bar(\"bla\",42)" 0)
-   (Some (Bar ("bla", 42), 14)) (of_string string_first_ppp "Bar (\"bla\",42)" 0)
-   (Some (Bar ("bla", 42), 17)) (of_string string_first_ppp "Bar ( \"bla\" , 42)" 0)
+   (Ok (Bar ("bla", 42), 13)) (of_string string_first_ppp "Bar(\"bla\",42)" 0)
+   (Ok (Bar ("bla", 42), 14)) (of_string string_first_ppp "Bar (\"bla\",42)" 0)
+   (Ok (Bar ("bla", 42), 17)) (of_string string_first_ppp "Bar ( \"bla\" , 42)" 0)
  *)
 (*$inject
    type test_rec = { a : int ; b : string_first option }
@@ -203,8 +201,8 @@ let option ppp = union (
                   | _ -> assert false)))
  *)
 (*$= test_rec_ppp & ~printer:(printer_of_ppp test_rec_ppp)
-  (Some ({ a=42; b= Some (Bar("bla", 4)) }, 36)) \
+  (Ok ({ a=42; b= Some (Bar("bla", 4)) }, 36)) \
     (of_string test_rec_ppp "{ a = 42 ; b = Some (Bar(\"bla\",4)) }" 0)
-  (Some ({ a=42; b= Some (Bar("bla", 4)) }, 40)) \
+  (Ok ({ a=42; b= Some (Bar("bla", 4)) }, 40)) \
     (of_string test_rec_ppp "{ a = 42 ; b = ((Some (Bar(\"bla\",4)))) }" 0)
  *)
