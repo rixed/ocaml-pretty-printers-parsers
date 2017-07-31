@@ -68,6 +68,125 @@ let result ok_ppp err_ppp = union (
   "{\"Ok\":42}"        (to_string (result int string) (Ok 42))
  *)
 
+(* JSON wants UTF-8 chars encoded as \u007B *)
+
+let read_next_utf8_char s o =
+  let septet o =
+    let c = Char.code s.[o] in
+    if c >= 0b11000000 then invalid_arg "read_next_utf8_char" else c land 0b00111111 in
+  if o >= String.length s then invalid_arg "read_next_utf8_char" ;
+  let c = Char.code s.[o] in
+  if c < 0b10000000 then c, 1 else
+  if c < 0b11000000 then invalid_arg "read_next_utf8_char" else
+  if c < 0b11100000 then
+    if o >= String.length s - 1 then invalid_arg "read_next_utf8_char"
+    else (c land 0b00011111) lsl 6 + septet (o+1), 2 else
+  if c < 0b11110000 then
+    if o >= String.length s - 2 then invalid_arg "read_next_utf8_char"
+    else (c land 0b00001111) lsl 12 + septet (o+1) lsl 6 + septet (o+2), 3 else
+  if c < 0b11110111 then
+    if o >= String.length s - 3 then invalid_arg "read_next_utf8_char"
+    else (c land 0b00000111) lsl 18 + septet (o+1) lsl 12 + septet (o+2) lsl 6 + septet (o+3), 4 else
+  invalid_arg "read_next_utf8_char"
+
+let json_encoded_string s =
+  (* Straightforward super slow (FIXME) *)
+  let rec loop cs o =
+    if o >= String.length s then
+      String.concat "" (List.rev cs) else
+    let uc, sz = read_next_utf8_char s o in
+    assert (sz > 0) ;
+    let c =
+      if sz = 1 then
+        match uc with
+        | 0x22 -> "\\\034" (* too many backslashes confuse qtest *)
+        | 0x5c -> "\092\092"
+        | 0x2f -> "\\/"
+        | 0x8  -> "\\b"
+        | 0xc  -> "\\f"
+        | 0xa  -> "\\n"
+        | 0xd  -> "\\r"
+        | 0x9  -> "\\t"
+        | uc   ->
+          assert (uc < 128 && uc >= 0) ;
+          String.make 1 (Char.chr uc)
+      else Printf.sprintf "\\u%04x" uc
+    in
+    loop (c :: cs) (o + sz)
+  in
+  (loop ["\""] 0) ^ "\""
+
+let utf_bytes_of_code_point c =
+  Printf.eprintf "utf_bytes_of_code_point of %d\n%!" c ;
+  assert (c >= 0) ;
+  if c < 0x80 then [Char.chr c], 1 else
+  if c < 0x800 then [
+    0b11000000 + (c lsr 6)  land 0b011111 |> Char.chr ;
+    0b10000000 +  c         land 0b111111 |> Char.chr ], 2 else
+  if c < 0x1_0000 then [
+    0b11100000 + (c lsr 12) land 0b001111 |> Char.chr ;
+    0b10000000 + (c lsr  6) land 0b111111 |> Char.chr ;
+    0b10000000 +  c         land 0b111111 |> Char.chr ], 3 else
+  if c < 0x11_0000 then [
+    0b11110000 + (c lsr 24) land 0b000111 |> Char.chr ;
+    0b10000000 + (c lsr 12) land 0b111111 |> Char.chr ;
+    0b10000000 + (c lsr  6) land 0b111111 |> Char.chr ;
+    0b10000000 +  c         land 0b111111 |> Char.chr ], 4 else
+  invalid_arg "utf_bytes_of_code_point"
+
+let hex_digit_of c =
+  if c >= '0' && c <= '9' then Char.code c - Char.code '0' else
+  if c >= 'a' && c <= 'f' then 10 + Char.code c - Char.code 'a' else
+  if c >= 'A' && c <= 'F' then 10 + Char.code c - Char.code 'A' else
+  invalid_arg "hex_digit_of"
+
+type string_part = First | Char | BackslashStart
+let string : string PPP.t =
+  { PPP.printer = (fun o v -> o (json_encoded_string v)) ;
+    PPP.scanner = (fun i o ->
+      let rec loop o l s part =
+        match part, i o 1 with
+        | First, "\"" -> loop (o+1) l s Char
+        | Char, "\092" -> loop (o+1) l s BackslashStart
+        | Char, "\"" -> (* The only successful termination *)
+          Ok (PPP.string_of l s, o+1)
+        | Char, d when String.length d > 0 ->
+            loop (o+1) (d.[0]::l) (s+1) Char
+        | BackslashStart, "\"" -> loop (o+1) ('"'::l) (s+1) Char
+        | BackslashStart, "\092" -> loop (o+1) ('\\'::l) (s+1) Char
+        | BackslashStart, "/" -> loop (o+1) ('/'::l) (s+1) Char
+        | BackslashStart, "b" -> loop (o+1) ('\b'::l) (s+1) Char
+        | BackslashStart, "f" -> loop (o+1) ('\013'::l) (s+1) Char
+        | BackslashStart, "n" -> loop (o+1) ('\n'::l) (s+1) Char
+        | BackslashStart, "r" -> loop (o+1) ('\r'::l) (s+1) Char
+        | BackslashStart, "t" -> loop (o+1) ('\t'::l) (s+1) Char
+        | BackslashStart, "u" ->
+          let u = i (o+1) 4 in
+          if String.length u < 4 then
+            PPP.parse_error o "truncated utf-8 backslash-sequence" else
+          let c = hex_digit_of u.[0] lsl 12 +
+                  hex_digit_of u.[1] lsl  8 +
+                  hex_digit_of u.[2] lsl  4 +
+                  hex_digit_of u.[3] in
+          let bytes, nb_bytes = utf_bytes_of_code_point c in
+          loop (o+5) (List.rev_append bytes l) (s + nb_bytes) Char
+        | _ -> PPP.parse_error o "invalid character in string" (* everything else is game-over *)
+      in
+      try loop o [] 0 First
+      with Failure _ -> PPP.parse_error o "invalid UTF-9 encoding") ;
+    PPP.descr = "string" }
+(*$= string & ~printer:id
+   "\"glop\"" (to_string string "glop")
+   "\"\"" (to_string string "")
+   "\"\\r\"" (to_string string "\r")
+   "\"\\u2192\"" (to_string string "→")
+ *)
+(*$= string & ~printer:(function Error e -> PPP.string_of_error e | Ok (s, i) -> Printf.sprintf "(%s, %d)" s i)
+  (Ok ("glop", 6)) (of_string string "\"glop\"" 0)
+  (Ok ("gl\bop\n", 10)) (of_string string "\"gl\\bop\\n\"" 0)
+  (Ok ("→", 8)) (of_string string "\"\\u2192\"" 0)
+ *)
+
 (*$inject
   let test_id p x =
     let s = to_string p x in
@@ -79,10 +198,10 @@ let result ok_ppp err_ppp = union (
     | Ok (x',_) -> abs_float (x -. x') <= 1e-5
     | _ -> false
 *)
+(* Q.string can generate invalid UTF-8 strings *)
 (*$Q & ~count:10
   Q.int (test_id int)
   Q.float (test_id_float)
   Q.(pair printable_string (small_list int)) (test_id (pair string (list int)))
-  Q.string (test_id string)
   Q.(array_of_size Gen.small_int (pair (small_list int) bool)) (test_id (array (pair (list int) bool)))
 *)
