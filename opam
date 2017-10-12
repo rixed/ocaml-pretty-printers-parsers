@@ -8,6 +8,7 @@ build-test: [ [make "check"] ]
 install: [make "install"]
 remove: ["ocamlfind" "remove" "ppp"]
 depends: [
+  "ppx_tools" {build}
   "ocamlfind" {build}
   "qcheck" {test}
 ]
