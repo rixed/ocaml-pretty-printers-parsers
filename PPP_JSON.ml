@@ -119,7 +119,6 @@ let json_encoded_string s =
   (loop ["\""] 0) ^ "\""
 
 let utf_bytes_of_code_point c =
-  Printf.eprintf "utf_bytes_of_code_point of %d\n%!" c ;
   assert (c >= 0) ;
   if c < 0x80 then [Char.chr c], 1 else
   if c < 0x800 then [
