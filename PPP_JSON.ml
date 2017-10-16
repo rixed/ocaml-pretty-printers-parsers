@@ -71,23 +71,25 @@ let result ok_ppp err_ppp = union (
 (* JSON wants UTF-8 chars encoded as \u007B *)
 
 let read_next_utf8_char s o =
+  let placeholder_char = Char.code '_' in
+  let invalid_utf8 = placeholder_char, 1 in
   let septet o =
     let c = Char.code s.[o] in
-    if c >= 0b11000000 then invalid_arg "read_next_utf8_char" else c land 0b00111111 in
+    if c >= 0b11000000 then placeholder_char else c land 0b00111111 in
   if o >= String.length s then invalid_arg "read_next_utf8_char" ;
   let c = Char.code s.[o] in
   if c < 0b10000000 then c, 1 else
-  if c < 0b11000000 then invalid_arg "read_next_utf8_char" else
+  if c < 0b11000000 then invalid_utf8 else
   if c < 0b11100000 then
-    if o >= String.length s - 1 then invalid_arg "read_next_utf8_char"
+    if o >= String.length s - 1 then invalid_utf8
     else (c land 0b00011111) lsl 6 + septet (o+1), 2 else
   if c < 0b11110000 then
-    if o >= String.length s - 2 then invalid_arg "read_next_utf8_char"
+    if o >= String.length s - 2 then invalid_utf8
     else (c land 0b00001111) lsl 12 + septet (o+1) lsl 6 + septet (o+2), 3 else
   if c < 0b11110111 then
-    if o >= String.length s - 3 then invalid_arg "read_next_utf8_char"
+    if o >= String.length s - 3 then invalid_utf8
     else (c land 0b00000111) lsl 18 + septet (o+1) lsl 12 + septet (o+2) lsl 6 + septet (o+3), 4 else
-  invalid_arg "read_next_utf8_char"
+  invalid_utf8
 
 let json_encoded_string s =
   (* Straightforward super slow (FIXME) *)
