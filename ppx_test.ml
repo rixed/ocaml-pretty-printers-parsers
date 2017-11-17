@@ -71,10 +71,12 @@ let () =
   test_string_conv B.t3_ppp "{ foo=42; bar =true; }" ;
   test_string_conv B.t3_ppp "{ bar =true; }" ;
   test_string_conv t8_ppp "(1, \"2\", true, 4.)" ;
+  test_string_conv t8_ppp "(1, \" escaped:\\\" \", true, 0)" ;
   test_string_conv t9_ppp "{u40 = 42190; u56=429000 ; i48 = -42 }" ;
   test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;
   test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}" ;
   test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}" ;
+  test_string_conv j1_ppp "{\"field2\": \" escaped:\\\" \", \"field4\": 1}" ;
   test_string_conv j2_ppp "{\"NoArg\":null}" ;
   test_string_conv j2_ppp "{\"Arg\":42}" ;
   test_string_conv j4_ppp "{ \"baz\": { \"J31\": null } }" ;
