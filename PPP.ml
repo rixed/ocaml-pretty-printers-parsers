@@ -115,12 +115,22 @@ let of_string ppp s =
 
 let chop s = chop_sub s 0 (String.length s)
 
-exception ParseError (* TODO: an error message would be useful *)
+exception ParseError of string
+exception TrailingGarbage of int
+
+let () =
+  Printexc.register_printer (function
+    | ParseError s ->
+        Some s
+    | TrailingGarbage o ->
+        Some ("Trailing content at offset "^ string_of_int o)
+    | _ -> None)
+
 let of_string_exc ppp s =
   let s = chop s in
   match of_string ppp s 0 with
-  | Error _ -> raise ParseError
-  | Ok (_, l) when l < String.length s -> raise ParseError
+  | Error e -> raise (ParseError (string_of_error e))
+  | Ok (_, l) when l < String.length s -> raise (TrailingGarbage l)
   | Ok (x, _) -> x
 
 (* TODO: get rid of that one *)
