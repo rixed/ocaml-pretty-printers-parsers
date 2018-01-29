@@ -427,7 +427,7 @@ let (+-) ppp1 ppp2 =
       ppp2.printer o ()) ;
     scanner = (fun i o ->
       match ppp1.scanner i o with
-      | Error _ as e-> e
+      | Error _ as e -> e
       | Ok (v, o) ->
         (match ppp2.scanner i o with
         | Error _ as e -> e
