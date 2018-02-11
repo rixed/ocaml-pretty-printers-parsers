@@ -45,6 +45,8 @@ type j6_extens = { mandatory : int ; optional : string [@ppp_default "default"] 
 
 type j7_rename = { foo : int [@ppp_rename "bar"] ; bar : string [@ppp_rename "baz"] } [@@ppp PPP_JSON]
 
+type j8 = { a : int ; b : float option } [@@ppp PPP_JSON]
+
 type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON]
 type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON]
 
@@ -91,6 +93,17 @@ let () =
   test_string_conv j6_extens_ppp "{\"optional\" : \"present\" , \"extra\" : { \"foo\":42 }, \"mandatory\":1 }" ;
   (* Check field renaming *)
   test_string_conv j7_rename_ppp "{ \"bar\":42, \"baz\":\"glop\" }" ;
+  test_string_conv j8_ppp "{ \"a\":42, \"b\":1 }" ;
+  test_string_conv j8_ppp "{ \"a\":42, \"b\": null }" ;
+  test_string_conv j8_ppp "{ \"a\":42, \"b\": \"nan\" }" ;
+  test_string_conv j8_ppp "{ \"a\":42, \"b\": \"inf\" }" ;
+  test_string_conv j8_ppp "{ \"a\":42, \"b\": \"-inf\" }" ;
+  let r = PPP.of_string_exc j8_ppp "{ \"a\":42, \"b\": null }" in
+  Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
+  let r = PPP.of_string_exc j8_ppp "{ \"a\":42, \"b\": \"nan\" }" in
+  Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
+  let r = PPP.of_string_exc j8_ppp "{ \"a\":42, \"b\": \"-inf\" }" in
+  Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
   test_string_conv arrt_ppp "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }" ;
   test_string_conv arrt_ppp "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }" ;
   test_string_conv export_msg_ppp "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}" ;

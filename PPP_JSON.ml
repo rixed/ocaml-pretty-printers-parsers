@@ -12,7 +12,9 @@ let unit : unit PPP.t = cst "null"
 
 let char = PPP.char "\""
 
-let float = PPP.float "null" "null"
+(* We cannot use "null" to represent nan or inf since that would turn
+ * all None float options into nans *)
+let float = PPP.float "\"nan\"" "\"inf\"" "\"-inf\""
 
 let option ppp = PPP.option ~placeholder:(cst "null") ppp
 

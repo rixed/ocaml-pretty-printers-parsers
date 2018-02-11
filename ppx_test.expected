@@ -32,6 +32,14 @@ list of int: [42,12]
 {mandatory: int; optional: string}: {"mandatory":1, "optional":"default"}
 {mandatory: int; optional: string}: {"mandatory":1, "optional":"present"}
 {bar: int; baz: string}: {"bar":42, "baz":"glop"}
+{a: int; b: float or null}: {"a":42, "b":1.0}
+{a: int; b: float or null}: {"a":42, "b":null}
+{a: int; b: float or null}: {"a":42, "b":"nan"}
+{a: int; b: float or null}: {"a":42, "b":"inf"}
+{a: int; b: float or null}: {"a":42, "b":"-inf"}
+j8 null -> none
+j8 null -> nan
+j8 null -> -inf
 AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AFloat":[26.3129910322,93.4604360475]}
 AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AU64":[1493409971653419,1493409400273526]}
 {first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":1, "columns":[["h1",false,{"AU64":[1]}]]}
