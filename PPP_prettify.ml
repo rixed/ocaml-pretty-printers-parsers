@@ -185,6 +185,7 @@ let reindent ?(indent="\t")
              ?(separators=":=") k =
   let stack = ref [] in
   let had_indent = ref true in
+  let had_space = ref false in
   let k_string = String.iter (fun c -> k (Chr c)) in
   let add_indent () =
     let rec loop = function
@@ -193,19 +194,30 @@ let reindent ?(indent="\t")
           k_string indent ;
           loop rest in
     had_indent := true ;
+    had_space := false ;
     loop !stack in
+  let output x =
+    if x = Chr ' ' then (
+      if not !had_space then (
+        k x ;
+        had_space := true
+      )
+    ) else (
+      k x ;
+      if !had_space then had_space := false
+    ) in
   fun x ->
     match x, !stack with
     | Chr c, cls::stk when cls = c ->
-        k (Chr '\n') ;
+        output (Chr '\n') ;
         stack := stk ;
         add_indent () ;
         had_indent := false ;
-        k x ;
+        output x ;
     | Chr c, _ when is_in separators c ->
-        k (Chr ' ') ;
-        k x ;
-        k (Chr ' ')
+        output (Chr ' ') ;
+        output x ;
+        output (Chr ' ')
     | Chr c, _ ->
         (match List.assoc c pars with
         | exception Not_found ->
@@ -213,17 +225,17 @@ let reindent ?(indent="\t")
               (* swallow blanks after indent *)
             ) else (
               had_indent := false ;
-              k x
+              output x
             )
         | cls ->
             stack := cls :: !stack ;
-            if not !had_indent then k (Chr ' ') ;
-            k x ;
-            k (Chr '\n') ;
+            if not !had_indent then output (Chr ' ') ;
+            output x ;
+            output (Chr '\n') ;
             add_indent ())
     | (Verbatim _ | EOF), _ ->
         had_indent := false ;
-        k x
+        output x
 
 let no_trainling_blanks ?(blanks=" \t") k =
   let last_blanks = ref [] in
@@ -296,7 +308,7 @@ let remove_blanks ?(blanks=" \t") k = function
 
 let prettifier ?blanks ?quotes ?escape_char ?indent ?pars ?columns ?separators k =
   split_verbatim ?quotes ?escape_char (
-    remove_blanks ?blanks (
+    compress_blanks ?blanks (
       reindent ?indent ?pars (
         add_newlines ?columns ?blanks ?separators (
           remove_empty_lines ?blanks (
