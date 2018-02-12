@@ -220,6 +220,15 @@ let rec skip_blanks i o =
   if String.length s = 1 && is_blank s.[0] then skip_blanks i (o + 1)
   else o
 
+(* Parse a given char - useful with combinators *)
+let char_cst c : unit t =
+  let s = String.make 1 c in
+  { printer = (fun o () -> o s) ;
+    scanner = (fun i o ->
+      if i o 1 <> s then parse_error o ("missing constant char "^ s)
+      else Ok ((), o + 1)) ;
+    descr = s }
+
 let char quote : char t =
   { printer = (fun o v -> o quote ; o (String.make 1 v) ; o quote) ;
     scanner = (fun i o ->
@@ -794,7 +803,9 @@ and skip_group cls groupings delims i o =
         debug stderr "skip_group: not the end of this group, we should have a delim (%a).\n%!"
           (list_print string_print) delims ;
         match List.find (stream_starts_with i o) delims with
-        | exception Not_found -> None
+        | exception Not_found ->
+          debug stderr "...yet this is not a delimiter?!" ;
+          None
         | delim -> (* If we found a delim then we are not done yet *)
           let o = o + String.length delim in
           debug stderr "skip_any: found a delimiter ending at %d\n%!" o ;
@@ -1001,7 +1012,7 @@ let none : unit t =
 
 (*$inject
   let groupings = [ "(",")" ; "[","]" ; "[|","|]" ]
-  let delims = [ "," ; ";" ]
+  let delims = [ "," ; ";" ; "=>" ]
   type color = RGB of int * int * int
              | Named of string
              | Transparent
@@ -1143,6 +1154,33 @@ let to_unit def ppp =
 let newline =
   to_unit None (option (cst "\r")) -- cst "\n"
 
+let hashtbl opn cls sep kv_sep pppk pppv =
+  let fold f init h =
+    Hashtbl.fold (fun k v i -> f i (k, v)) h init
+  and of_rev_list l =
+    let h = Hashtbl.create 11 in
+    List.iter (fun (k, v) -> Hashtbl.replace h k v) l ;
+    h in
+  let ppp = pppk +- kv_sep ++ pppv in
+  seq "hashtbl" opn cls sep fold of_rev_list ppp
+
+(*$inject
+  type phonebook = (int, person) Hashtbl.t
+
+  let phonebook : phonebook t = hashtbl "{" "}" ";" (cst ":") int person
+ *)
+(* Because Hashtbl.fold order is unspecified and can change from OCaml
+ * major version to the next we'd rather be cautious about that one test: *)
+(*$T phonebook
+  let s = \
+    let h = Hashtbl.create 2 in \
+    Hashtbl.add h 111 { name = "Jena"; age = 41; male = false } ; \
+    Hashtbl.add h 222 { name = "Bill"; age = 25; male = true } ; \
+    to_string phonebook h in \
+  s = "{111:{name=\"Jena\"; age=41; male=false};222:{name=\"Bill\"; age=25; male=true}}" || \
+  s = "{222:{name=\"Bill\"; age=25; male=true};111:{name=\"Jena\"; age=41; male=false}}"
+ *)
+
 (* The operations required by the PPX: *)
 module Ops =
 struct
@@ -1175,6 +1213,7 @@ struct
   let float = float "nan" "inf" "-inf"
   let list ppp = seq "list" "(" ")" ";" List.fold_left List.rev ppp
   let array ppp = seq "array" "(" ")" ";" Array.fold_left (fun l -> Array.of_list (List.rev l)) ppp
+  let hashtbl pppk pppv = hashtbl "{" "}" ";" (cst "=>") pppk pppv
   let unit = cst "_"
   let none = none
   let option = option

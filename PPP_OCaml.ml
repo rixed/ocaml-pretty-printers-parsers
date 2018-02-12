@@ -42,6 +42,11 @@ let array (ppp : 'a PPP.t) : 'a array PPP.t =
   (Ok ([| "1" ; "2" |], 11)) (of_string (array string) "[|\"1\";\"2\"|]" 0)
  *)
 
+let hashtbl (pppk : 'k PPP.t) (pppv : 'v PPP.t) : ('k, 'v) Hashtbl.t PPP.t =
+  (* As there is no literal notation for hash-table in OCaml we have to be a
+   * bit creative: *)
+  PPP.hashtbl "{" "}" ";" (cst "=>") pppk pppv
+
 let tuple_open = "("
 let tuple_close = ")"
 let tuple_sep = ","
@@ -93,7 +98,7 @@ let triple = Tuple.tuple3
  *)
 
 let groupings = [ "{","}" ; "[","]" ; "(",")" ; "[|","|]" ; "begin","end" ]
-let delims = [ "," ; ";" ]
+let delims = [ "," ; ";" ; "=>" ]
 
 let record ?extensible x =
   PPP.record ?extensible "{" "}" "=" ";" groupings delims PPP.identifier x

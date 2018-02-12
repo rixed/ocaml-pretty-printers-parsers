@@ -25,6 +25,8 @@ type t8 = int * string * bool * float [@@ppp PPP_OCaml]
 open Stdint
 type t9 = { u40 : uint40 ; i48 : int48 ; u56 : uint56 } [@@ppp PPP_OCaml]
 
+type t10 = { foo10 : int ; bar10 : (string, int) Hashtbl.t } [@@ppp PPP_OCaml]
+
 (* Now some JSON types *)
 
 type j1 = { field1 : int [@ppp_default 15];
@@ -46,6 +48,8 @@ type j6_extens = { mandatory : int ; optional : string [@ppp_default "default"] 
 type j7_rename = { foo : int [@ppp_rename "bar"] ; bar : string [@ppp_rename "baz"] } [@@ppp PPP_JSON]
 
 type j8 = { a : int ; b : float option } [@@ppp PPP_JSON]
+
+type j9 = { foo : int ; hash : (int, float) Hashtbl.t } [@@ppp PPP_JSON]
 
 type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON]
 type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON]
@@ -75,6 +79,7 @@ let () =
   test_string_conv t8_ppp "(1, \"2\", true, 4.)" ;
   test_string_conv t8_ppp "(1, \" escaped:\\\" \", true, 0)" ;
   test_string_conv t9_ppp "{u40 = 42190; u56=429000 ; i48 = -42 }" ;
+  test_string_conv t10_ppp "{foo10 = 4; bar10= { \"glop\"=>42 ; \"pas\"=>1}}" ;
   test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;
   test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}" ;
   test_string_conv j1_ppp "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}" ;
@@ -104,6 +109,7 @@ let () =
   Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
   let r = PPP.of_string_exc j8_ppp "{ \"a\":42, \"b\": \"-inf\" }" in
   Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
+  test_string_conv j9_ppp "{ \"foo\":42, \"hash\": { \"34\": \"inf\", \"42\": 42.0 } }" ;
   test_string_conv arrt_ppp "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }" ;
   test_string_conv arrt_ppp "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }" ;
   test_string_conv export_msg_ppp "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}" ;

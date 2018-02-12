@@ -129,6 +129,7 @@ let ppp_name_of_name = function
 
 let ppp_ident_of_ident = function
   | Longident.Lident str -> Longident.Lident (ppp_name_of_name str)
+  | Longident.Ldot (Longident.Lident "Hashtbl", str) -> Longident.Lident "hashtbl"
   | Longident.Ldot (pref, str) -> Longident.Ldot (pref, ppp_name_of_name str)
   | _ -> failwith "Lapply?"
 
