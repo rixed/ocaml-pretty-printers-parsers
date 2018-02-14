@@ -14,10 +14,10 @@ let parse_error o s = Error (o, CannotParse s)
 let unknown_field o1 o2 n = Error (o1, UnknownField (n, o2))
 let not_done o s = Error (o, NotDone s)
 
-let string_of_error (o, e) =
+let string_of_error ?(location_of_offset=string_of_int) (o, e) =
   match e with
-  | CannotParse s -> "Parse error at "^ string_of_int o ^": "^ s
-  | UnknownField (f, _) -> "Unknown field '"^ f ^"' at "^ string_of_int o
+  | CannotParse s -> "Parse error at "^ location_of_offset o ^": "^ s
+  | UnknownField (f, _) -> "Unknown field '"^ f ^"' at "^ location_of_offset o
   | NotDone s -> "Was expecting "^ s ^" at end of input"
 
 let best_error e1 e2 =
@@ -36,22 +36,29 @@ let zero = Char.code '0'
 let str_is_digit s = String.length s > 0 && is_digit s.[0]
 let digit_of s = Char.code s.[0] - zero
 
-let rec chop_sub s b e =
-  if b >= e then "" else
-  if is_blank s.[b] then chop_sub s (b+1) e else
-  if is_blank s.[e-1] then chop_sub s b (e-1) else
-  String.sub s b (e-b)
+let chop_sub s b e =
+  (* Also return the nb of chars chopped at the beginning. Useful later to
+   * compute offset in the user provided string from the offset in chopped
+   * string. *)
+  let rec aux b e =
+    if b >= e then b, "" else
+    if is_blank s.[b] then aux (b+1) e else
+    if is_blank s.[e-1] then aux b (e-1) else
+    b, String.sub s b (e-b)
+  in
+  let b', s = aux b e in
+  b' - b, s
 (*$inject let id x = x *)
-(*$= chop_sub & ~printer:id
-  "glop" (chop_sub "glop" 0 4)
-  "glop" (chop_sub " glop" 0 5)
-  "glop" (chop_sub "glop " 0 5)
-  "glop" (chop_sub "glop	" 0 5)
-  "glop" (chop_sub "  glop" 0 6)
-  "glop" (chop_sub "	 	glop " 0 8)
-  "" (chop_sub "" 0 0)
-  "" (chop_sub " " 0 1)
-  "" (chop_sub " " 1 1)
+(*$= chop_sub & ~printer:(fun (o, s) -> Printf.sprintf "(%d, %S)" o s)
+  (0, "glop") (chop_sub "glop" 0 4)
+  (1, "glop") (chop_sub " glop" 0 5)
+  (0, "glop") (chop_sub "glop " 0 5)
+  (0, "glop") (chop_sub "glop	" 0 5)
+  (2, "glop") (chop_sub "  glop" 0 6)
+  (3, "glop") (chop_sub "	 	glop " 0 8)
+  (0, "") (chop_sub "" 0 0)
+  (1, "") (chop_sub " " 0 1)
+  (0, "") (chop_sub " " 1 1)
 *)
 
 let string_of lst len =
@@ -126,16 +133,26 @@ let () =
         Some ("Trailing content at offset "^ string_of_int o)
     | _ -> None)
 
+let location_of_offset o s =
+  let rec loop l c i =
+    if i >= o then Printf.sprintf "line %d, column %d" (l+1) (c+1)
+    else if s.[i] = '\n' then loop (l+1) 0 (i+1)
+    else loop l (c+1) (i+1)
+  in
+  loop 0 0 0
+
 let of_string_exc ppp s =
-  let s = chop s in
-  match of_string ppp s 0 with
-  | Error e -> raise (ParseError (string_of_error e))
-  | Ok (_, l) when l < String.length s -> raise (TrailingGarbage l)
+  let l, s' = chop s in
+  let location_of_offset o =
+    location_of_offset (o + l) s in
+  match of_string ppp s' 0 with
+  | Error e -> raise (ParseError (string_of_error ~location_of_offset e))
+  | Ok (_, l) when l < String.length s' -> raise (TrailingGarbage l)
   | Ok (x, _) -> x
 
 (* TODO: get rid of that one *)
 let of_string_res ppp s =
-  let s = chop s in
+  let _, s = chop s in
   of_string ppp s 0
 
 (* We want to allow non-seekable channels therefore we must keep a short
@@ -917,7 +934,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                 | str when str = cls ->
                   debug stderr "union: found cls %S\n%!" cls ;
                   let chop_str = i value_start (cls_pos - value_start) in
-                  let value = chop_sub chop_str 0 (cls_pos - value_start) in
+                  let _, value = chop_sub chop_str 0 (cls_pos - value_start) in
                   debug stderr "union: found value %S\n%!" value ;
                   (* Here we have an issue. We may fail to parse the value in
                    * case of extraneous groupings again. This is a bit annoying
