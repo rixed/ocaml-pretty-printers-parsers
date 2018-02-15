@@ -25,7 +25,9 @@ let array x = list x >>: (Array.to_list, Array.of_list)
 
 let hashtbl (pppk : 'k PPP.t) (pppv : 'v PPP.t) : ('k, 'v) Hashtbl.t PPP.t =
   (* JSON keys are restricted to strings... *)
-  let pppk = PPP.char_cst '"' -+ pppk +- PPP.char_cst '"' in
+  let pppk =
+    if pppk.descr = "string" then pppk
+    else PPP.char_cst '"' -+ pppk +- PPP.char_cst '"' in
   PPP.hashtbl "{" "}" "," (cst ":") pppk pppv
 
 let groupings = [ "{","}" ; "[","]" ]

@@ -42,6 +42,7 @@ j8 null -> none
 j8 null -> nan
 j8 null -> -inf
 {foo: int; hash: hashtbl of "int":float}: {"foo":42, "hash":{"34":"inf","42":42.0}}
+{hash: hashtbl of string:boolean}: {"hash":{"foo":true,"bar":false}}
 AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AFloat":[26.3129910322,93.4604360475]}
 AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AU64":[1493409971653419,1493409400273526]}
 {first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":1, "columns":[["h1",false,{"AU64":[1]}]]}

@@ -50,6 +50,7 @@ type j7_rename = { foo : int [@ppp_rename "bar"] ; bar : string [@ppp_rename "ba
 type j8 = { a : int ; b : float option } [@@ppp PPP_JSON]
 
 type j9 = { foo : int ; hash : (int, float) Hashtbl.t } [@@ppp PPP_JSON]
+type j10 = { hash : (string, bool) Hashtbl.t } [@@ppp PPP_JSON]
 
 type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON]
 type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON]
@@ -110,6 +111,7 @@ let () =
   let r = PPP.of_string_exc j8_ppp "{ \"a\":42, \"b\": \"-inf\" }" in
   Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
   test_string_conv j9_ppp "{ \"foo\":42, \"hash\": { \"34\": \"inf\", \"42\": 42.0 } }" ;
+  test_string_conv j10_ppp "{\"hash\":{\"foo\": true, \"bar\":false}}" ;
   test_string_conv arrt_ppp "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }" ;
   test_string_conv arrt_ppp "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }" ;
   test_string_conv export_msg_ppp "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}" ;
