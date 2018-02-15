@@ -8,7 +8,7 @@ let trace fmt =
 exception NotImplemented
 exception CannotBacktrackThatFar
 exception IntegerOverflow
-exception MissingRequiredField (* used by ppx *)
+exception MissingRequiredField of string (* used by ppx *)
 
 type error_type = CannotParse of string
                 | UnknownField of string * int (* end of value *)
@@ -1166,7 +1166,7 @@ let field eq sep id_sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
       field "=" "; " ": " ~default:true "male" bool) >>:
       ((fun { name ; age ; male } -> Some (Some name, Some age), Some male),
        (function (Some (Some name, Some age), Some male) -> { name ; age ; male }
-               | _ -> raise MissingRequiredField))
+               | _ -> raise (MissingRequiredField "?")))
  *)
 (*$= person & ~printer:id
   "{name=\"John\"; age=41; male=true}" (to_string person { name = "John"; age = 41; male = true })

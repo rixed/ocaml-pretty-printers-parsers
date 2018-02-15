@@ -41,7 +41,7 @@ ppx_test.cmx: PPP.cmxa ppx_ppp.opt ppx_test.ml
 ppx_test.opt: PPP.cmxa ppx_test.cmx
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -linkpkg -package stdint PPP.cmxa ppx_test.cmx -o $@
 
-ppx_test_source.ml: ppx_test.ml
+ppx_test_source.ml: ppx_test.ml ppx_ppp.opt
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -package stdint -ppx ./ppx_ppp.opt PPP.cmxa -c $< -dsource 2> $@
 
 clean:

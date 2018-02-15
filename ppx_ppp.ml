@@ -61,8 +61,8 @@ let exp_of_bool = function
 
 let exp_of_unit = exp_of_constr "()" None
 
-let exp_of_ppp_exception name =
-  Exp.construct (loc_of Longident.(Ldot (Lident "PPP", name))) None
+let exp_of_ppp_exception name value =
+  Exp.construct (loc_of Longident.(Ldot (Lident "PPP", name))) value
 
 let exp_of_name x =
   Exp.ident (ident_of_name x)
@@ -110,10 +110,7 @@ let pattern_of_n_vars n x =
 let pattern_of_constr name opt =
   Pat.construct (ident_of_name name) opt
 
-let pattern_catch_all exp =
-  { pc_lhs = Pat.any () ;
-    pc_guard = None ;
-    pc_rhs = exp }
+let pattern_none = pattern_of_constr "None" None
 
 let value_binding_of_expr name expr =
   Vb.mk ~attrs:[disable_warnings [8; 27; 39]] (pattern_of_var name) expr
@@ -233,7 +230,24 @@ and leftist_tree_all_pattern ~options nb_vars =
   let prev = some_of_var 0 in
   loop true prev 1
 
-(* Returns an leftist option tree expression made of record x labels *)
+and leftist_tree_none_at nb_vars none_pos =
+  let some_of p =
+    pattern_of_constr "Some" (Some p) in
+  let pat_of i =
+    if i = none_pos then pattern_none
+    else Pat.any () in
+  let rec loop prev i =
+    if i >= nb_vars then prev else
+    let prev = Pat.tuple [
+      (if i = 1 then prev
+      else if i <= none_pos then Pat.any ()
+      else some_of prev) ;
+      pat_of i ] in
+    loop prev (i + 1)
+  in
+  loop (pat_of 0) 1
+
+(* Returns a leftist option tree expression made of record x labels *)
 and leftist_tree_all_expr ~options exps =
   let some_of exp =
     if options then exp_of_constr "Some" (Some exp)
@@ -349,7 +363,6 @@ let exp_of_label_decls ?constr_name ~extensible label_decls =
                   field_exp_of_name "x" label_decl.pld_name.Asttypes.txt)
                   not_ignored_labels)
           }] ;
-        (* No support for default values (yet!) *)
         Exp.function_ ([
           {
             pc_lhs = leftist_tree_all_pattern ~options:true nb_labels ;
@@ -361,10 +374,17 @@ let exp_of_label_decls ?constr_name ~extensible label_decls =
                     ) not_ignored_labels @
                   List.map default_of_field ignored_labels
                 ) None)
-          }] @ [
-            pattern_catch_all
-              (apply1 "raise" (exp_of_ppp_exception "MissingRequiredField"))
-          ]) ]))
+          }] @ (
+            (* We could have the name of the first missing field if we
+             * matched against 'None, _', then 'Some _, None, _', etc *)
+            List.mapi (fun i (label_decl, _, rename) ->
+              {
+                pc_lhs = leftist_tree_none_at nb_labels i ;
+                pc_guard = None ;
+                pc_rhs = apply1 "raise" (exp_of_ppp_exception "MissingRequiredField" (Some (Exp.constant (Const.string rename))))
+              }
+            ) not_ignored_labels
+          )) ]))
 
 let variant_exp_of_constructor_decl constructor_decl =
   apply2 "variant"
