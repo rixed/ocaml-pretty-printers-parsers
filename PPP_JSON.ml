@@ -155,11 +155,15 @@ let string : string PPP.t =
       let rec loop o l s part =
         match part, i o 1 with
         | First, "\"" -> loop (o+1) l s Char
+        | First, s ->
+          PPP.parse_error o ("invalid first character in JSON string: "^ s)
         | Char, "\092" -> loop (o+1) l s BackslashStart
         | Char, "\"" -> (* The only successful termination *)
           Ok (PPP.string_of l s, o+1)
         | Char, d when String.length d > 0 ->
-            loop (o+1) (d.[0]::l) (s+1) Char
+          loop (o+1) (d.[0]::l) (s+1) Char
+        | Char, s ->
+          PPP.parse_error o ("invalid character in JSON string: "^ s)
         | BackslashStart, "\"" -> loop (o+1) ('"'::l) (s+1) Char
         | BackslashStart, "\092" -> loop (o+1) ('\\'::l) (s+1) Char
         | BackslashStart, "/" -> loop (o+1) ('/'::l) (s+1) Char
@@ -178,7 +182,8 @@ let string : string PPP.t =
                   hex_digit_of u.[3] in
           let bytes, nb_bytes = utf_bytes_of_code_point c in
           loop (o+5) (List.rev_append bytes l) (s + nb_bytes) Char
-        | _ -> PPP.parse_error o "invalid character in string" (* everything else is game-over *)
+        | BackslashStart, s ->
+          PPP.parse_error o ("invalid escaped character in JSON string: "^ s)
       in
       try loop o [] 0 First
       with Failure _ -> PPP.parse_error o "invalid UTF-9 encoding") ;

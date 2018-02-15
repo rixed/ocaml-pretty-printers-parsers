@@ -1,5 +1,10 @@
 open Stdint
 
+let debug = false
+let trace fmt =
+  if debug then Printf.fprintf stderr (fmt ^^ "\n%!")
+  else Printf.ifprintf stderr fmt
+
 exception NotImplemented
 exception CannotBacktrackThatFar
 exception IntegerOverflow
@@ -20,6 +25,7 @@ let string_of_error ?(location_of_offset=string_of_int) (o, e) =
   | UnknownField (f, _) -> "Unknown field '"^ f ^"' at "^ location_of_offset o
   | NotDone s -> "Was expecting "^ s ^" at end of input"
 
+(* TODO: Maybe try to keep the two first best? *)
 let best_error e1 e2 =
   match e1, e2 with
   | (_, UnknownField _), _ -> e1
@@ -396,26 +402,38 @@ let seq name opn cls sep fold of_rev_list ppp =
           i + 1) 0 v ;
       o cls) ;
     scanner = (fun i o ->
+      trace "seq: trying to parse a sequence from %d" o ;
       let rec parse_sep prev o =
         let o = skip_blanks i o in
         if stream_starts_with i o sep then
           parse_item prev (o + String.length sep)
         else if stream_starts_with i o cls then
           Ok (of_rev_list prev, o + String.length cls)
-        else parse_error o (Printf.sprintf "Cannot find separator %S" sep)
+        else (
+          trace "seq: cannot find separator %S at %d" sep o ;
+          parse_error o (Printf.sprintf "Cannot find separator %S" sep))
       and parse_item prev o =
         let o = skip_blanks i o in
+        trace "seq: skipped blanks, first item starts at %d with %S" o (i o 1) ;
         match ppp.scanner i o with
-        | Ok (x, o) -> parse_sep (x::prev) o
+        | Ok (x, o) ->
+          trace "seq: found item, now looking for sep %S" sep ;
+          parse_sep (x::prev) o
         | Error _ as err ->
           if stream_starts_with i o cls then
             Ok (of_rev_list prev, o + String.length cls)
-          else err
+          else (
+            trace "seq: cannot parse item at %d" o ;
+            err)
       in
       let o = skip_blanks i o in
-      if stream_starts_with i o opn then
+      if stream_starts_with i o opn then (
+        trace "seq: found opn %S at %d" opn o ;
         parse_item [] (o + String.length opn)
-      else parse_error o (Printf.sprintf "Cannot find sequence opening %S" opn)) ;
+      ) else (
+        trace "seq: cannot find opn %S" opn ;
+        let err = Printf.sprintf "Cannot find sequence opening %S" opn in
+        parse_error o err)) ;
     descr = name ^" of "^ ppp.descr }
 (*$= seq & ~printer:(function Error e -> string_of_error e | Ok (l,o) -> Printf.sprintf "(%s, %d)" (String.concat ";" l) o)
   (Ok (["a";"b";"cde"], 9)) \
@@ -758,7 +776,6 @@ let rec skip_string ?(backslashed=false) i o =
   | "" -> None
   | _ -> skip_string i (o+1)
 
-let debug = Printf.ifprintf (*Printf.fprintf*)
 let list_print ep oc lst =
   Printf.fprintf oc "[" ;
   List.iteri (fun i e ->
@@ -780,15 +797,15 @@ let rec skip_any groupings delims i o =
   let c = i o 1 in
   if c = "" then Some o else
   if c = "\"" then (
-    debug stderr "skip_any: found a string at %d, skipping it.\n%!" o ;
+    trace "skip_any: found a string at %d, skipping it." o ;
     skip_string i (o+1)) else
   if List.exists (stream_starts_with i o) delims then (
-    debug stderr "skip_any: found a delimiter at %d\n%!" o ;
+    trace "skip_any: found a delimiter at %d" o ;
     Some o) else
   if List.exists (fun (_, cls) -> stream_starts_with i o cls) groupings then (
     (* Ok but this value can be itself in an outside group so group ends
      * must count as delimiters: *)
-    debug stderr "skip_any: found the end of an enclosing group at %d\n%!" o ;
+    trace "skip_any: found the end of an enclosing group at %d" o ;
     Some o) else
   match List.find (fun (opn, _) -> stream_starts_with i o opn) groupings with
   | exception Not_found ->
@@ -796,7 +813,7 @@ let rec skip_any groupings delims i o =
     (* FIXME: this non-tail recursion is now much too slow *)
     skip_any groupings delims i (o+1)
   | opn, cls ->
-    debug stderr "skip_any: found a %S,%S group starting at %d\n%!" opn cls o ;
+    trace "skip_any: found a %S,%S group starting at %d" opn cls o ;
     skip_group cls groupings delims i (o + String.length opn)
 
 (* Like skip_any but skip a sequence of values, as far as closing the opened group: *)
@@ -805,27 +822,27 @@ and skip_group cls groupings delims i o =
   let clsl = String.length cls in
   let o = skip_blanks i o in
   if stream_starts_with i o cls then (
-    debug stderr "skip_group: group start with close %S, ending\n%!" cls ;
+    trace "skip_group: group start with close %S, ending" cls ;
     Some (o + clsl)
   ) else (
-    debug stderr "skip_group: recursing into skip_any from pos %d\n%!" o ;
+    trace "skip_group: recursing into skip_any from pos %d" o ;
     match skip_any groupings delims i o with
     | None -> None
     | Some o ->
-      debug stderr "skip_group: skip_any returned at pos %d\n%!" o ;
+      trace "skip_group: skip_any returned at pos %d" o ;
       let o = skip_blanks i o in
       if stream_starts_with i o cls then (
         Some (o + clsl)
       ) else (
-        debug stderr "skip_group: not the end of this group, we should have a delim (%a).\n%!"
+        trace "skip_group: not the end of this group, we should have a delim (%a)."
           (list_print string_print) delims ;
         match List.find (stream_starts_with i o) delims with
         | exception Not_found ->
-          debug stderr "...yet this is not a delimiter?!" ;
+          trace "...yet this is not a delimiter?!" ;
           None
         | delim -> (* If we found a delim then we are not done yet *)
           let o = o + String.length delim in
-          debug stderr "skip_any: found a delimiter ending at %d\n%!" o ;
+          trace "skip_any: found a delimiter ending at %d" o ;
           skip_group cls groupings delims i o
       )
   )
@@ -898,44 +915,44 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
       (* There could be some grouping, skip it (unless that's our opening). *)
       let groupings' = List.filter (fun (o, _) -> o <> opn) groupings in
       let opened, o = skip_opened_groups groupings' i union_start in
-      debug stderr "union: found %d opened groups\n%!" (List.length opened) ;
+      trace "union: found %d opened groups" (List.length opened) ;
       let o = skip_blanks i o in
       match i o opn_len with
       | str when str = opn ->
-        debug stderr "union: found union opn %S\n%!" opn ;
+        trace "union: found union opn %S" opn ;
         let o = o + opn_len in
         let o = skip_blanks i o in
         (match name_ppp.scanner i o with
         | Error _ as e -> e
         | Ok (name, o') ->
-          debug stderr "union: found union name %S\n%!" name ;
+          trace "union: found union name %S" name ;
           (* Now skip the eq sign *)
           let o' = skip_blanks i o' in
           let eq_len = String.length eq in
           (match i o' eq_len with
           | e when e = eq ->
-            debug stderr "union: found eq %S\n%!" eq ;
+            trace "union: found eq %S" eq ;
             let value_start = skip_blanks i (o' + eq_len) in
             (* Now the value *)
             let delims' = if cls_len > 0 then cls::delims else delims in
             (match skip_any groupings delims' i value_start with
             | None -> parse_error value_start (Printf.sprintf "Cannot delimit value for %S" name)
             | Some value_stop ->
-              debug stderr "union: found value, up to o=%d (starting at %d)\n%!" value_stop value_start ;
+              trace "union: found value, up to o=%d (starting at %d)" value_stop value_start ;
               (* If there were some opened grouping at the beginning, then we
                * must find them closed now: *)
               (match skip_closed_groups opened i value_stop with
               | None -> parse_error value_stop "Expected closing group"
               | Some o ->
-                debug stderr "union: found closed groupings\n%!" ;
+                trace "union: found closed groupings" ;
                 let cls_pos = skip_blanks i o in
                 (* Check we have cls: *)
                 (match i cls_pos cls_len with
                 | str when str = cls ->
-                  debug stderr "union: found cls %S\n%!" cls ;
+                  trace "union: found cls %S" cls ;
                   let chop_str = i value_start (cls_pos - value_start) in
                   let _, value = chop_sub chop_str 0 (cls_pos - value_start) in
-                  debug stderr "union: found value %S\n%!" value ;
+                  trace "union: found value %S" value ;
                   (* Here we have an issue. We may fail to parse the value in
                    * case of extraneous groupings again. This is a bit annoying
                    * since some parsers may depends on the groups to be present
@@ -946,23 +963,23 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                    * then 1 parentheses which will eventually succeed (notice 0
                    * parentheses would fail). *)
                   let rec try_ungroup opened i o =
-                    debug stderr "union: trying to parse value for label %S\n%!" name ;
+                    trace "union: trying to parse value for label %S" name ;
                     match s name i o with
                     | Ok (v, o) ->
-                      debug stderr "union: parsed value!\n%!" ;
+                      trace "union: parsed value!" ;
                       (* If we had to open some groups, check we can now close
                        * them: *)
                       (match skip_closed_groups opened i o with
                       | None ->
-                        debug stderr "union: Cannot close %d opened groups around value %S" (List.length opened) value ;
+                        trace "union: Cannot close %d opened groups around value %S" (List.length opened) value ;
                         parse_error o "Expected closing group"
                       | Some oo -> Ok (v, oo))
                     | Error r as err ->
-                      debug stderr "union: cannot parse value from %d (%s)\n%!"
+                      trace "union: cannot parse value from %d (%s)"
                         o (string_of_error r) ;
                       (match opened_group groupings i o with
                       | None ->
-                        debug stderr "union: but this is not a group opening. Game over!\n%!" ;
+                        trace "union: but this is not a group opening. Game over!" ;
                         (* If the error was a name error, set the actual end of value: *)
                         (match r with
                         | o, UnknownField (n, _) ->
@@ -970,7 +987,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                         | _ -> err)
                       | Some (group, o) ->
                         let o = skip_blanks i o in
-                        debug stderr "union: retry from %d after the opened group\n%!" o ;
+                        trace "union: retry from %d after the opened group" o ;
                         try_ungroup (group::opened) i o)
                   in
                   let ii = string_reader value in
@@ -982,7 +999,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                     if oo = String.length value then
                       Ok (v, cls_pos + cls_len)
                     else (
-                      debug stderr "union: garbage at end of value %S from offset %d\n%!" value oo ;
+                      trace "union: garbage at end of value %S from offset %d" value oo ;
                       parse_error oo (Printf.sprintf "Garbage at end of value for %S" name)
                     ))
                 | _ -> parse_error cls_pos (Printf.sprintf "Expected closing of union %S" cls))))
@@ -1115,8 +1132,8 @@ let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, 
         | str when str = cls ->
           (match res with None -> parse_error o "empty record"
                         | Some r -> Ok (r, o + cls_len))
-        | _ -> parse_error o (Printf.sprintf "Was expecting closing of record %S" cls))
-      | _ -> parse_error o (Printf.sprintf "Was expecting opening of record %S" opn)) ;
+        | _ -> parse_error o (Printf.sprintf "Expected closing of record %S" cls))
+      | _ -> parse_error o (Printf.sprintf "Expected opening of record %S" opn)) ;
     descr = opn ^ descr ^ cls }
 
 (* But then we need a special combinator to also compute the merge of the pairs of pairs... *)
