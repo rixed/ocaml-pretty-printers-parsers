@@ -6,6 +6,7 @@ PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) |
 PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=42; b=Some Foo 42}
 PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=-2; b=Some Baz }
 PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}: Glop {a=0; b=Some Baz }
+PasGlop of null | Glop of {a: int; b: Foo of int | Bar of [string,int,boolean] | Baz of null or null}: {"Glop":{"a":42, "b":null}}
 Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None} | None}: Zap {a=Some PasGlop }
 Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None} | None}: Zap {a=Some PasGlop }
 Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None} | None}: Zap {a=Some PasGlop }
@@ -43,6 +44,7 @@ j8 null -> nan
 j8 null -> -inf
 {foo: int; hash: hashtbl of "int":float}: {"foo":42, "hash":{"34":"inf","42":42.0}}
 {hash: hashtbl of string:boolean}: {"hash":{"foo":true,"bar":false}}
+PasJlop of null | Jlop of {c: int; d: {a: int; b: float or null} or null}: {"Jlop":{"c":1, "d":null}}
 AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AFloat":[26.3129910322,93.4604360475]}
 AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AU64":[1493409971653419,1493409400273526]}
 {first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":1, "columns":[["h1",false,{"AU64":[1]}]]}
