@@ -67,6 +67,9 @@ let exp_of_ppp_exception name value =
 let exp_of_name x =
   Exp.ident (ident_of_name x)
 
+let exp_of_impl_name impl_mod x =
+  Exp.ident (loc_of Longident.(Ldot (impl_mod.Asttypes.txt, x)))
+
 let list_init n f =
   let rec loop prev i =
     if i >= n then List.rev prev else
@@ -127,47 +130,64 @@ let ppp_name_of_name impl_mod = function
   | ("bool" | "char" | "int" | "float" | "string" | "unit" |
      "int8" | "int16" | "int32" | "int40" | "int48" | "int56" | "int64" | "int128" |
      "uint8" | "uint16" | "uint32" | "uint40" | "uint48" | "uint56" | "uint64" | "uint128" |
-     "none" | "list" | "array" | "option") as x -> x
-  | x -> name_of_ppp impl_mod x
+     "none" | "list" | "array" | "option") as x -> true, x
+  | x -> false, name_of_ppp impl_mod x
 
 let ppp_ident_of_ident impl_mod = function
-  | Longident.Lident str -> Longident.Lident (ppp_name_of_name impl_mod str)
-  | Longident.Ldot (Longident.Lident "Hashtbl", str) -> Longident.Lident "hashtbl"
-  | Longident.Ldot (pref, str) -> Longident.Ldot (pref, ppp_name_of_name impl_mod str)
+  | Longident.Lident str ->
+      let reserved, ppp_name = ppp_name_of_name impl_mod str in
+      if reserved then Longident.Ldot (impl_mod.Asttypes.txt, ppp_name)
+      else Longident.Lident ppp_name
+  | Longident.Ldot (Longident.Lident "Hashtbl", str) ->
+      Longident.Ldot (impl_mod.Asttypes.txt, "hashtbl")
+  | Longident.Ldot (pref, str) ->
+      let reserved, ppp_name = ppp_name_of_name impl_mod str in
+      if reserved then
+        Printf.eprintf "Use standard type name %s with module %s\n"
+          str (String.concat "." (Longident.flatten pref)) ;
+      Longident.Ldot (pref, ppp_name)
   | _ -> failwith "Lapply?"
 
 let ppp_exp_of_ident impl_mod ident =
   ppp_ident_of_ident impl_mod ident |> loc_of |> Exp.ident
 
-let apply_expr f_expr param_exprs =
-  let params = List.map (fun exp -> Asttypes.Nolabel, exp) param_exprs in
+let apply_expr_ f_expr params =
   Exp.apply f_expr params
 
-let apply f_name param_exprs =
-  let f_expr = exp_of_name f_name in
+let apply_expr f_expr param_exprs =
+  let params = List.map (fun exp -> Asttypes.Nolabel, exp) param_exprs in
+  apply_expr_ f_expr params
+
+(* Apply the params to the impl_mod function named f_name *)
+let apply impl_mod f_name param_exprs =
+  let f_expr = exp_of_impl_name impl_mod f_name in
   apply_expr f_expr param_exprs
 
-let apply1 f_name p =
-  apply f_name [ p ]
+let raise_ e =
+  let raise_expr = exp_of_name "raise" in
+  Exp.apply raise_expr [ Asttypes.Nolabel, e ]
 
-let apply2 f_name p1 p2 =
-  apply f_name [ p1 ; p2 ]
+let apply1 impl_mod f_name p =
+  apply impl_mod f_name [ p ]
+
+let apply2 impl_mod f_name p1 p2 =
+  apply impl_mod f_name [ p1 ; p2 ]
 
 let rec ppp_exp_of_tuple impl_mod core_types =
   let rec add_type prev = function
     | [] -> (* close the tuple *)
-      apply "+-" [
+      apply impl_mod "+-" [
         prev ;
-        apply "cst" [ exp_of_name "tuple_close" ]
+        apply impl_mod "cst" [ exp_of_impl_name impl_mod "tuple_close" ]
       ]
     | core_type::rest ->
       let ppp = ppp_exp_of_core_type impl_mod core_type in
       let item =
-        apply "-+" [
-          apply "cst" [ exp_of_name "tuple_sep" ] ;
+        apply impl_mod "-+" [
+          apply impl_mod "cst" [ exp_of_impl_name impl_mod "tuple_sep" ] ;
           ppp ] in
       add_type
-        (apply "++" [ prev ; item ])
+        (apply impl_mod "++" [ prev ; item ])
         rest in
   match core_types with
   | [core_type] ->
@@ -175,13 +195,13 @@ let rec ppp_exp_of_tuple impl_mod core_types =
   | core_type::rest ->
     let ppp = ppp_exp_of_core_type impl_mod core_type in
     let tree =
-      apply "-+" [
-        apply "cst" [ exp_of_name "tuple_open" ] ;
+      apply impl_mod "-+" [
+        apply impl_mod "cst" [ exp_of_impl_name impl_mod "tuple_open" ] ;
         add_type ppp rest ] in
     let nb_types = List.length core_types in
     assert (nb_types >= 2) ;
     if nb_types = 2 then tree else
-    apply2 ">>:" tree (
+    apply2 impl_mod ">>:" tree (
       (* We need to flatten that tree into a tuple *)
       let tuple_pat = pattern_of_n_vars nb_types "x"
       and tuple_exp = exp_of_n_names nb_types "x"
@@ -193,7 +213,7 @@ let rec ppp_exp_of_tuple impl_mod core_types =
         Exp.fun_ Asttypes.Nolabel None tree_pat tuple_exp ]
     )
   | [] ->
-    exp_of_name "none"
+    exp_of_impl_name impl_mod "none"
 
 and ppp_exp_of_core_type impl_mod core_type =
   match core_type.ptyp_desc with
@@ -300,7 +320,7 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
     v in
   let field_exp_of_label_decl = function
     | label_decl, None, label_name ->
-      apply2 "field"
+      apply2 impl_mod "field"
         (Exp.constant (Const.string label_name))
         (ppp_exp_of_core_type impl_mod label_decl.pld_type)
     | label_decl, Some (v, _), label_name ->
@@ -308,14 +328,14 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
         Asttypes.Optional "default", exp_of_constr "Some" (Some v) ;
         Asttypes.Nolabel, Exp.constant (Const.string label_name) ;
         Asttypes.Nolabel, ppp_exp_of_core_type impl_mod label_decl.pld_type ] in
-      Exp.apply (exp_of_name "field") params in
-  apply2 ">>:" (
+      apply_expr_ (exp_of_impl_name impl_mod "field") params in
+  apply2 impl_mod ">>:" (
     let fields =
       (* For each field, emit a field expression *)
       List.map field_exp_of_label_decl not_ignored_labels |>
       (* Connect all the variants with ||| operator *)
-      list_reduce (apply2 "<->") in
-    Exp.apply (exp_of_name "record")
+      list_reduce (apply2 impl_mod "<->") in
+    apply_expr_ (exp_of_impl_name impl_mod "record")
               [ Asttypes.Optional "extensible",
                   if extensible then
                     exp_of_constr "Some" (Some (exp_of_bool true))
@@ -387,13 +407,13 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
               {
                 pc_lhs = leftist_tree_none_at nb_labels i ;
                 pc_guard = None ;
-                pc_rhs = apply1 "raise" (exp_of_ppp_exception "MissingRequiredField" (Some (Exp.constant (Const.string rename))))
+                pc_rhs = raise_ (exp_of_ppp_exception "MissingRequiredField" (Some (Exp.constant (Const.string rename))))
               }
             ) not_ignored_labels
           )) ]))
 
 let variant_exp_of_constructor_decl impl_mod constructor_decl =
-  apply2 "variant"
+  apply2 impl_mod "variant"
     (Exp.constant (
       Const.string
         constructor_decl.pcd_name.Asttypes.txt))
@@ -465,12 +485,12 @@ let exp_of_constructor_arguments impl_mod constructor_decls =
   let construct_has_record = function
     | { pcd_args = Pcstr_record _ ; _ } -> true
     | _ -> false in
-  apply2 ">>:" (
-    apply1 "union" (
+  apply2 impl_mod ">>:" (
+    apply1 impl_mod "union" (
       (* For each constructor, emit a variant expression *)
       List.map (variant_exp_of_constructor_decl impl_mod) constructor_decls |>
       (* Connect all the variants with ||| operator *)
-      list_reduce (apply2 "|||"))
+      list_reduce (apply2 impl_mod "|||"))
   ) (
     let nb_consts = List.length constructor_decls in
     if nb_consts = 1 then (
@@ -570,13 +590,11 @@ let ppps_of_type_declaration tdec =
                             records are extensible.\n%!" ;
           value_binding_of_expr
             (name_of_ppp impl_mod tdec.ptype_name.Asttypes.txt)
-            (Exp.open_ Asttypes.Override impl_mod
-              (exp_of_constructor_arguments impl_mod constructor_decls)) :: vbs
+            (exp_of_constructor_arguments impl_mod constructor_decls) :: vbs
         | Ptype_record label_decls ->
           value_binding_of_expr
             (name_of_ppp impl_mod tdec.ptype_name.Asttypes.txt)
-            (Exp.open_ Asttypes.Override impl_mod
-              (exp_of_label_decls ~extensible impl_mod label_decls)) :: vbs
+            (exp_of_label_decls ~extensible impl_mod label_decls) :: vbs
         | _ -> (* Nope *) [])
       | Some core_type ->
         if extensible then
@@ -584,8 +602,7 @@ let ppps_of_type_declaration tdec =
                           records are extensible.\n%!" ;
         value_binding_of_expr
           (name_of_ppp impl_mod tdec.ptype_name.Asttypes.txt)
-          (Exp.open_ Asttypes.Override impl_mod
-            (ppp_exp_of_core_type impl_mod core_type)) :: vbs
+          (ppp_exp_of_core_type impl_mod core_type) :: vbs
     ) [] impl_mods
 
 let map_structure mapper str =
