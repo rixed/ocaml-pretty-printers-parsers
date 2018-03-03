@@ -28,6 +28,8 @@ type t9 = { u40 : uint40 ; i48 : int48 ; u56 : uint56 } [@@ppp PPP_OCaml]
 
 type t10 = { foo10 : int ; bar10 : (string, int) Hashtbl.t } [@@ppp PPP_OCaml]
 
+type t11 = int list ref [@@ppp PPP_OCaml]
+
 (* Now some JSON types *)
 
 type j1 = { field1 : int [@ppp_default 15];
@@ -84,6 +86,7 @@ let () =
   test_string_conv t8_ppp_ocaml "(1, \" escaped:\\\" \", true, 0)" ;
   test_string_conv t9_ppp_ocaml "{u40 = 42190; u56=429000 ; i48 = -42 }" ;
   test_string_conv t10_ppp_ocaml "{foo10 = 4; bar10= { \"glop\"=>42 ; \"pas\"=>1}}" ;
+  test_string_conv t11_ppp_ocaml "[1; 2; 3]" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}" ;

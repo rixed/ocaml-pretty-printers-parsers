@@ -130,7 +130,7 @@ let ppp_name_of_name impl_mod = function
   | ("bool" | "char" | "int" | "float" | "string" | "unit" |
      "int8" | "int16" | "int32" | "int40" | "int48" | "int56" | "int64" | "int128" |
      "uint8" | "uint16" | "uint32" | "uint40" | "uint48" | "uint56" | "uint64" | "uint128" |
-     "none" | "list" | "array" | "option") as x -> true, x
+     "none" | "list" | "array" | "option" | "ref") as x -> true, x
   | x -> false, name_of_ppp impl_mod x
 
 let ppp_ident_of_ident impl_mod = function
