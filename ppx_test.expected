@@ -19,6 +19,7 @@ Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (st
 {u40: uint40; i48: int48; u56: uint56}: {u40=42190; i48=-42; u56=429000}
 {foo10: int; bar10: hashtbl of string=>int}: {foo10=4; bar10={"glop"=>42;"pas"=>1}}
 list of int: [1;2;3]
+{f1: list of int}: {f1=[1;2;3]}
 {field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"x", "field4":10, "field5":false}
 {field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"z", "field4":null, "field5":false}
 {field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"x", "field4":1, "field5":true}

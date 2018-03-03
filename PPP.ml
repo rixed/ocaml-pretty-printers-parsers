@@ -1215,8 +1215,8 @@ let hashtbl opn cls sep kv_sep pppk pppv =
   s = "{222:{name=\"Bill\"; age=25; male=true};111:{name=\"Jena\"; age=41; male=false}}"
  *)
 
-(* References: just ignore them *)
-let ref ppp = ppp
+(* References: mostly ignore them *)
+let ref ppp = ppp >>: ((!), ref)
 
 (* The operations required by the PPX: *)
 module Ops =
