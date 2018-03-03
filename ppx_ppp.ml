@@ -140,6 +140,8 @@ let ppp_ident_of_ident impl_mod = function
       else Longident.Lident ppp_name
   | Longident.Ldot (Longident.Lident "Hashtbl", str) ->
       Longident.Ldot (impl_mod.Asttypes.txt, "hashtbl")
+  | Longident.Ldot (Longident.Lident "Unix", str) ->
+      Longident.Ldot (Longident.Lident "PPP_Unix", "inet_addr")
   | Longident.Ldot (pref, str) ->
       let reserved, ppp_name = ppp_name_of_name impl_mod str in
       if reserved then

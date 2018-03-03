@@ -4,3 +4,9 @@ archive(byte) = "PPP.cma"
 archive(native) = "PPP.cmxa"
 ppx = "./ppx_ppp.opt"
 requires = "stdint ppx_tools"
+
+package "unix" (
+	archive(byte) = "PPP-unix.cma"
+	archive(native) = "PPP-unix.cmxa"
+	requires = "unix"
+)
