@@ -75,7 +75,7 @@ INSTALLED = \
 	META PPP.cmxa PPP.cma PPP.a \
 	PPP.cmx PPP.cmi PPP.cmo \
 	PPP-unix.cmxa PPP-unix.cma PPP-unix.a \
-	PPP_Unix.cmx PPP_Unix.cmi PPP_unix.cmo \
+	PPP_Unix.cmx PPP_Unix.cmi PPP_Unix.cmo \
 	PPP_OCaml.cmx PPP_OCaml.cmi PPP_OCaml.cmo \
 	PPP_JSON.cmx PPP_JSON.cmi PPP_JSON.cmo \
 	PPP_CSV.cmx PPP_CSV.cmi PPP_CSV.cmo \
