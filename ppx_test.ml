@@ -34,8 +34,8 @@ type t12 = { f1 : t11 ref } [@@ppp PPP_OCaml]
 type t13 = { addr : Unix.inet_addr } [@@ppp PPP_OCaml]
 
 (* Recursive types: *)
-type t14 = { rec1 : t15 } [@@ppp PPP_OCaml]
-and t15 = { rec2 : t14 } [@@ppp PPP_OCaml]
+type t14 = T1 of t15 | T2 of int [@@ppp PPP_OCaml]
+and t15 = T3 of t14 | T4 of string [@@ppp PPP_OCaml]
 
 (* Now some JSON types *)
 
@@ -72,66 +72,68 @@ let () =
     | Ok (x, _) -> PPP.to_string ppp x
     | Error e -> PPP.string_of_error e in
   let test_string_conv ppp s =
-    Printf.printf "%s: %s\n" ppp.PPP.descr (mouline ppp s) in
-  test_string_conv (t6_ppp_ocaml()) "Glop { a = 42 ; b = None }" ;
-  test_string_conv (t6_ppp_ocaml()) "Glop { a = 42 ; b = Some (Bar (\"bla\", 4, false)) }" ;
-  test_string_conv (t6_ppp_ocaml()) "Glop{a =42; b= Some (Bar(\"bla\"  , 4, true)) }" ;
-  test_string_conv (t6_ppp_ocaml()) "Glop{a=42;b=Some(Bar(\"bla\",4, true))}" ;
-  test_string_conv (t6_ppp_ocaml()) "Glop { a = 42 ; b = Some (Foo 42) }" ;
-  test_string_conv (t6_ppp_ocaml()) "Glop { a = 42 ; b = Some (Foo (42)) }" ;
-  test_string_conv (t6_ppp_ocaml()) "Glop { a = -2 ; b = Some Baz }" ;
-  test_string_conv (t6_ppp_ocaml()) "Glop { a = 0 ; b = Some(Baz) }" ;
-  test_string_conv (t6_ppp_json())  "{\"Glop\": { \"a\": 42, \"b\": null } }" ;
-  test_string_conv (t7_ppp_ocaml()) "Zap { a = Some PasGlop }" ;
-  test_string_conv (t7_ppp_ocaml()) "Zap{ a= Some PasGlop}" ;
-  test_string_conv (t7_ppp_ocaml()) "Zap{a=Some(PasGlop)}" ;
-  test_string_conv (t7_ppp_ocaml()) "Zap{a=None}" ;
-  test_string_conv (B.t3_ppp_ocaml()) "{ foo=42; bar=false }" ;
-  test_string_conv (B.t3_ppp_ocaml()) "{ foo=42; bar =true; }" ;
-  test_string_conv (B.t3_ppp_ocaml()) "{ bar =true; }" ;
-  test_string_conv (t8_ppp_ocaml()) "(1, \"2\", true, 4.)" ;
-  test_string_conv (t8_ppp_ocaml()) "(1, \" escaped:\\\" \", true, 0)" ;
-  test_string_conv (t9_ppp_ocaml()) "{u40 = 42190; u56=429000 ; i48 = -42 }" ;
-  test_string_conv (t10_ppp_ocaml()) "{foo10 = 4; bar10= { \"glop\"=>42 ; \"pas\"=>1}}" ;
-  test_string_conv (t11_ppp_ocaml()) "[1; 2; 3]" ;
-  test_string_conv (t12_ppp_ocaml()) "{ f1 = [1;2;3] }" ;
-  test_string_conv (t13_ppp_ocaml()) "{ addr = \"192.168.0.42\" }" ;
-  test_string_conv (j1_ppp_json()) "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;
-  test_string_conv (j1_ppp_json()) "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}" ;
-  test_string_conv (j1_ppp_json()) "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}" ;
-  test_string_conv (j1_ppp_json()) "{\"field2\": \" escaped:\\\" \", \"field4\": 1}" ;
-  test_string_conv (j2_ppp_json()) "{\"NoArg\":null}" ;
-  test_string_conv (j2_ppp_json()) "{\"Arg\":42}" ;
-  test_string_conv (j4_ppp_json()) "{ \"baz\": { \"J31\": null } }" ;
-  test_string_conv (j5_ppp_json()) "[42,12]" ;
-  test_string_conv (j5_ppp_json()) "[42, 12]" ;
-  test_string_conv (j5_ppp_json()) "[42 ,12]" ;
-  test_string_conv (j5_ppp_json()) "[ 42, 12 ] " ;
-  test_string_conv (j5_ppp_json()) " [42 , 12]" ;
-  test_string_conv (j5_ppp_json()) "  [ 42 , 12   ] " ;
+    let ppp_ = ppp () in
+    Printf.printf "%s: %s\n" ppp_.PPP.descr (mouline ppp s) in
+  test_string_conv t6_ppp_ocaml "Glop { a = 42 ; b = None }" ;
+  test_string_conv t6_ppp_ocaml "Glop { a = 42 ; b = Some (Bar (\"bla\", 4, false)) }" ;
+  test_string_conv t6_ppp_ocaml "Glop{a =42; b= Some (Bar(\"bla\"  , 4, true)) }" ;
+  test_string_conv t6_ppp_ocaml "Glop{a=42;b=Some(Bar(\"bla\",4, true))}" ;
+  test_string_conv t6_ppp_ocaml "Glop { a = 42 ; b = Some (Foo 42) }" ;
+  test_string_conv t6_ppp_ocaml "Glop { a = 42 ; b = Some (Foo (42)) }" ;
+  test_string_conv t6_ppp_ocaml "Glop { a = -2 ; b = Some Baz }" ;
+  test_string_conv t6_ppp_ocaml "Glop { a = 0 ; b = Some(Baz) }" ;
+  test_string_conv t6_ppp_json  "{\"Glop\": { \"a\": 42, \"b\": null } }" ;
+  test_string_conv t7_ppp_ocaml "Zap { a = Some PasGlop }" ;
+  test_string_conv t7_ppp_ocaml "Zap{ a= Some PasGlop}" ;
+  test_string_conv t7_ppp_ocaml "Zap{a=Some(PasGlop)}" ;
+  test_string_conv t7_ppp_ocaml "Zap{a=None}" ;
+  test_string_conv B.t3_ppp_ocaml "{ foo=42; bar=false }" ;
+  test_string_conv B.t3_ppp_ocaml "{ foo=42; bar =true; }" ;
+  test_string_conv B.t3_ppp_ocaml "{ bar =true; }" ;
+  test_string_conv t8_ppp_ocaml "(1, \"2\", true, 4.)" ;
+  test_string_conv t8_ppp_ocaml "(1, \" escaped:\\\" \", true, 0)" ;
+  test_string_conv t9_ppp_ocaml "{u40 = 42190; u56=429000 ; i48 = -42 }" ;
+  test_string_conv t10_ppp_ocaml "{foo10 = 4; bar10= { \"glop\"=>42 ; \"pas\"=>1}}" ;
+  test_string_conv t11_ppp_ocaml "[1; 2; 3]" ;
+  test_string_conv t12_ppp_ocaml "{ f1 = [1;2;3] }" ;
+  test_string_conv t13_ppp_ocaml "{ addr = \"192.168.0.42\" }" ;
+  test_string_conv t14_ppp_ocaml "T1 (T3 (T2 42))" ;
+  test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;
+  test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}" ;
+  test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}" ;
+  test_string_conv j1_ppp_json "{\"field2\": \" escaped:\\\" \", \"field4\": 1}" ;
+  test_string_conv j2_ppp_json "{\"NoArg\":null}" ;
+  test_string_conv j2_ppp_json "{\"Arg\":42}" ;
+  test_string_conv j4_ppp_json "{ \"baz\": { \"J31\": null } }" ;
+  test_string_conv j5_ppp_json "[42,12]" ;
+  test_string_conv j5_ppp_json "[42, 12]" ;
+  test_string_conv j5_ppp_json "[42 ,12]" ;
+  test_string_conv j5_ppp_json "[ 42, 12 ] " ;
+  test_string_conv j5_ppp_json " [42 , 12]" ;
+  test_string_conv j5_ppp_json "  [ 42 , 12   ] " ;
   (* Check it's OK to have more fields than declared: *)
-  test_string_conv (j6_extens_ppp_json()) "{\"mandatory\":1, \"extra\": [1,2,3]}" ;
-  test_string_conv (j6_extens_ppp_json()) "{\"optional\" : \"present\" , \"extra\" : { \"foo\":42 }, \"mandatory\":1 }" ;
+  test_string_conv j6_extens_ppp_json "{\"mandatory\":1, \"extra\": [1,2,3]}" ;
+  test_string_conv j6_extens_ppp_json "{\"optional\" : \"present\" , \"extra\" : { \"foo\":42 }, \"mandatory\":1 }" ;
   (* Check field renaming *)
-  test_string_conv (j7_rename_ppp_json()) "{ \"bar\":42, \"baz\":\"glop\" }" ;
-  test_string_conv (j8_ppp_json()) "{ \"a\":42, \"b\":1 }" ;
-  test_string_conv (j8_ppp_json()) "{ \"a\":42, \"b\": null }" ;
-  test_string_conv (j8_ppp_json()) "{ \"a\":42, \"b\": \"nan\" }" ;
-  test_string_conv (j8_ppp_json()) "{ \"a\":42, \"b\": \"inf\" }" ;
-  test_string_conv (j8_ppp_json()) "{ \"a\":42, \"b\": \"-inf\" }" ;
-  let r = PPP.of_string_exc (j8_ppp_json()) "{ \"a\":42, \"b\": null }" in
+  test_string_conv j7_rename_ppp_json "{ \"bar\":42, \"baz\":\"glop\" }" ;
+  test_string_conv j8_ppp_json "{ \"a\":42, \"b\":1 }" ;
+  test_string_conv j8_ppp_json "{ \"a\":42, \"b\": null }" ;
+  test_string_conv j8_ppp_json "{ \"a\":42, \"b\": \"nan\" }" ;
+  test_string_conv j8_ppp_json "{ \"a\":42, \"b\": \"inf\" }" ;
+  test_string_conv j8_ppp_json "{ \"a\":42, \"b\": \"-inf\" }" ;
+  let r = PPP.of_string_exc j8_ppp_json "{ \"a\":42, \"b\": null }" in
   Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
-  let r = PPP.of_string_exc (j8_ppp_json()) "{ \"a\":42, \"b\": \"nan\" }" in
+  let r = PPP.of_string_exc j8_ppp_json "{ \"a\":42, \"b\": \"nan\" }" in
   Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
-  let r = PPP.of_string_exc (j8_ppp_json()) "{ \"a\":42, \"b\": \"-inf\" }" in
+  let r = PPP.of_string_exc j8_ppp_json "{ \"a\":42, \"b\": \"-inf\" }" in
   Printf.printf "j8 null -> %s\n" (match r.b with None -> "none" | Some f -> string_of_float f) ;
-  test_string_conv (j9_ppp_json()) "{ \"foo\":42, \"hash\": { \"34\": \"inf\", \"42\": 42.0 } }" ;
-  test_string_conv (j10_ppp_json()) "{\"hash\":{\"foo\": true, \"bar\":false}}" ;
-  test_string_conv (j11_ppp_json()) "{\"Jlop\": { \"c\": 1, \"d\": null }}" ;
-  test_string_conv (arrt_ppp_json()) "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }" ;
-  test_string_conv (arrt_ppp_json()) "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }" ;
-  test_string_conv (export_msg_ppp_json()) "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}" ;
-  test_string_conv (export_msg_ppp_json()) "{\"first\":1,\"columns\":[[\"h1\",false,{\"AU64\":[1]}]]}" ;
+  test_string_conv j9_ppp_json "{ \"foo\":42, \"hash\": { \"34\": \"inf\", \"42\": 42.0 } }" ;
+  test_string_conv j10_ppp_json "{\"hash\":{\"foo\": true, \"bar\":false}}" ;
+  test_string_conv j11_ppp_json "{\"Jlop\": { \"c\": 1, \"d\": null }}" ;
+  test_string_conv arrt_ppp_json "{ \"AFloat\" : [ 26.3129910322, 93.4604360475 ] }" ;
+  test_string_conv arrt_ppp_json "{ \"AU64\" : [ 1493409971653419, 1493409400273526 ] }" ;
+  test_string_conv export_msg_ppp_json "{\"columns\":[[\"h1\",false,{\"AU64\":[1]}]],\"first\":1}" ;
+  test_string_conv export_msg_ppp_json "{\"first\":1,\"columns\":[[\"h1\",false,{\"AU64\":[1]}]]}" ;
   let str = "{\n\
      \"columns\" : [\n\
       [\n\
@@ -162,4 +164,4 @@ let () =
    ],\n\
    \"first\" : 583\n\
   }" in
-  test_string_conv (export_msg_ppp_json()) str
+  test_string_conv export_msg_ppp_json str

@@ -135,33 +135,28 @@ let ppp_name_of_name impl_mod = function
      "none" | "list" | "array" | "option" | "ref") as x -> true, x
   | x -> false, name_of_ppp impl_mod x
 
-(* Return a bool and the indentifier for the ppp. The bool tells if the
- * identifier must be eta-expended. *)
 let ppp_ident_of_ident impl_mod = function
   | Longident.Lident str ->
       let reserved, ppp_name = ppp_name_of_name impl_mod str in
       if reserved then
-        false, Longident.Ldot (impl_mod.Asttypes.txt, ppp_name)
+        Longident.Ldot (impl_mod.Asttypes.txt, ppp_name)
       else
-        true, Longident.Lident ppp_name
+        Longident.Lident ppp_name
   | Longident.Ldot (Longident.Lident "Hashtbl", "t") ->
-      false, Longident.Ldot (impl_mod.Asttypes.txt, "hashtbl")
+      Longident.Ldot (impl_mod.Asttypes.txt, "hashtbl")
   | Longident.Ldot (Longident.Lident "Unix", "inet_addr") ->
-      false, Longident.Ldot (Longident.Lident "PPP_Unix", "inet_addr")
+      Longident.Ldot (Longident.Lident "PPP_Unix", "inet_addr")
   (* TODO: also: List.t, Array.t... *)
   | Longident.Ldot (pref, str) ->
       let reserved, ppp_name = ppp_name_of_name impl_mod str in
       if reserved then
         Printf.eprintf "Use standard type name %s with module %s\n"
           str (String.concat "." (Longident.flatten pref)) ;
-      true, Longident.Ldot (pref, ppp_name)
+      Longident.Ldot (pref, ppp_name)
   | _ -> failwith "Lapply?"
 
 let ppp_exp_of_ident impl_mod ident =
-  let expand, ident = ppp_ident_of_ident impl_mod ident in
-  let exp = loc_of ident |> Exp.ident in
-  if expand then Exp.apply exp [ Asttypes.Nolabel, exp_of_unit ]
-  else exp
+  ppp_ident_of_ident impl_mod ident |> loc_of |> Exp.ident
 
 let apply_expr_ f_expr params =
   Exp.apply f_expr params

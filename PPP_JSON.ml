@@ -25,8 +25,9 @@ let array x = list x >>: (Array.to_list, Array.of_list)
 
 let hashtbl (pppk : 'k PPP.t) (pppv : 'v PPP.t) : ('k, 'v) Hashtbl.t PPP.t =
   (* JSON keys are restricted to strings... *)
+  let pppk_ = pppk () in
   let pppk =
-    if pppk.descr = "string" then pppk
+    if pppk_.descr = "string" then pppk
     else PPP.char_cst '"' -+ pppk +- PPP.char_cst '"' in
   PPP.hashtbl "{" "}" "," (cst ":") pppk pppv
 
@@ -152,6 +153,7 @@ let hex_digit_of c =
 
 type string_part = First | Char | BackslashStart
 let string : string PPP.t =
+  fun () ->
   { PPP.printer = (fun o v -> o (json_encoded_string v)) ;
     PPP.scanner = (fun i o ->
       let rec loop o l s part =
