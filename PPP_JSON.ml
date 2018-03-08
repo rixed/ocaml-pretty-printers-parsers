@@ -27,7 +27,7 @@ let hashtbl (pppk : 'k PPP.t) (pppv : 'v PPP.t) : ('k, 'v) Hashtbl.t PPP.t =
   (* JSON keys are restricted to strings... *)
   let pppk_ = pppk () in
   let pppk =
-    if pppk_.descr = "string" then pppk
+    if pppk_.descr 0 = "string" then pppk
     else PPP.char_cst '"' -+ pppk +- PPP.char_cst '"' in
   PPP.hashtbl "{" "}" "," (cst ":") pppk pppv
 
@@ -191,7 +191,7 @@ let string : string PPP.t =
       in
       try loop o [] 0 First
       with Failure _ -> PPP.parse_error o "invalid UTF-9 encoding") ;
-    PPP.descr = "string" }
+    PPP.descr = fun _ -> "string" }
 (*$= string & ~printer:id
    "\"glop\"" (to_string string "glop")
    "\"\"" (to_string string "")

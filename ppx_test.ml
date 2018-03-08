@@ -73,7 +73,7 @@ let () =
     | Error e -> PPP.string_of_error e in
   let test_string_conv ppp s =
     let ppp_ = ppp () in
-    Printf.printf "%s: %s\n" ppp_.PPP.descr (mouline ppp s) in
+    Printf.printf "%s: %s\n" (ppp_.PPP.descr 0) (mouline ppp s) in
   test_string_conv t6_ppp_ocaml "Glop { a = 42 ; b = None }" ;
   test_string_conv t6_ppp_ocaml "Glop { a = 42 ; b = Some (Bar (\"bla\", 4, false)) }" ;
   test_string_conv t6_ppp_ocaml "Glop{a =42; b= Some (Bar(\"bla\"  , 4, true)) }" ;

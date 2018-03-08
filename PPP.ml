@@ -104,9 +104,13 @@ type 'a scanner = reader -> int -> (('a * int), error) result
 (* We use 'a r but we define and take as argument 'a t, so that we can write
  * mutually recursive definitions such as:
  * let ppp1 () = ... ppp2 ... and ppp2 () = ... ppp1 ... *)
+(* Note re. recursive types:
+ * When parsing and printing we always make progress along the recursion,
+ * but when printing the type name we would loop forever ("T1 of T2 of T1
+ * of..."). To avoid this, the descr will take a depth as a parameter. *)
 type 'a r = { printer : 'a printer ;
               scanner : 'a scanner ;
-              descr : string }
+              descr : int -> string }
 type 'a t = unit -> 'a r
 
 (* Various I/O functions *)
@@ -119,7 +123,7 @@ let to_string ppp v =
   Buffer.contents buf
 
 let to_out_channel ppp chan v =
-  let ppp_ = ppp in
+  let ppp_ = ppp () in
   ppp_.printer (output_string chan) v
 
 let to_stdout ppp v = to_out_channel ppp stdout v
@@ -224,13 +228,17 @@ let of_seekable_in_channel ppp ic =
       seek_in ic o ;
       cur_offset := o
     ) ;
-    let read_or_zero ic len =
-      try really_input_string ic len
-      with End_of_file ->
-        (* FIXME: of course in case of short read we'd prefer to have what
-         * can be read. Use only input and handle retryable short reads :( *)
-        "" in
-    read_or_zero ic l
+    let buf = Bytes.create l in
+    let rec read_or_zero ic pos =
+      let rem = Bytes.length buf - pos in
+      if rem <= 0 then pos else
+        match input ic buf pos rem with
+        | 0 (*end of file *) -> pos
+        | l ->
+            cur_offset := !cur_offset + l ;
+            read_or_zero ic (pos + l) in
+    let len = read_or_zero ic 0 in
+    Bytes.sub_string buf 0 len
   in
   let ppp_ = ppp () in
   ppp_.scanner reader
@@ -269,7 +277,7 @@ let char_cst c : unit t =
     scanner = (fun i o ->
       if i o 1 <> s then parse_error o ("missing constant char "^ s)
       else Ok ((), o + 1)) ;
-    descr = s }
+    descr = fun _ -> s }
 
 let char quote : char t =
   fun () ->
@@ -284,7 +292,7 @@ let char quote : char t =
         let o = o + 1 in
         if i o ql <> quote then parse_error o "missing closing quote" else
         Ok (s.[0], o+ql)) ;
-    descr = "char" }
+    descr = fun _ -> "char" }
 
 (* C-like strings. Format: "..." *)
 type string_part = First | Char | BackslashStart | Backslash
@@ -322,7 +330,7 @@ let string : string t =
         | _ -> parse_error o "invalid character in string" (* everything else is game-over *)
       in
       loop o [] 0 0 First) ;
-    descr = "string" }
+    descr = fun _ -> "string" }
 (*$= string & ~printer:id
    "\"glop\"" (to_string string "glop")
    "\"\"" (to_string string "")
@@ -350,7 +358,7 @@ let identifier : string t =
       in
       let oo = loop o in
       if oo > o then Ok (i o (oo-o), oo) else parse_error o "identifier") ;
-    descr = "identifier" }
+    descr = fun _ -> "identifier" }
 (*$= identifier & ~printer:(function Error e -> string_of_error e | Ok (i, o) -> Printf.sprintf "(%s,%d)" i o)
   (Ok ("glop", 4)) (of_string identifier "glop" 0)
   (Ok ("glop", 4)) (of_string identifier "glop\n" 0)
@@ -416,8 +424,8 @@ let next_word is_word i o =
   if o' = o then None else Some (i o (o'-o), o')
 
 let seq name opn cls sep fold of_rev_list ppp =
-  let ppp_ = ppp () in
   fun () ->
+  let ppp_ = ppp () in
   { printer = (fun o v ->
       o opn ;
       fold (fun i v' ->
@@ -458,7 +466,7 @@ let seq name opn cls sep fold of_rev_list ppp =
         trace "seq: cannot find opn %S" opn ;
         let err = Printf.sprintf "Cannot find sequence opening %S" opn in
         parse_error o err)) ;
-    descr = name ^" of "^ ppp_.descr }
+    descr = fun depth -> name ^" of "^ ppp_.descr (depth + 1) }
 (*$= seq & ~printer:(function Error e -> string_of_error e | Ok (l,o) -> Printf.sprintf "(%s, %d)" (String.concat ";" l) o)
   (Ok (["a";"b";"cde"], 9)) \
     (of_string (seq "list" "[" "]" ";" List.fold_left List.rev identifier) "[a;b;cde]" 0)
@@ -467,8 +475,8 @@ let seq name opn cls sep fold of_rev_list ppp =
  *)
 
 let (++) ppp1 ppp2 =
-  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
   fun () ->
+  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
   { printer = (fun o (v1, v2) ->
       ppp1_.printer o v1 ;
       ppp2_.printer o v2) ;
@@ -479,11 +487,11 @@ let (++) ppp1 ppp2 =
         (match ppp2_.scanner i o with
         | Error _ as e -> e
         | Ok (v2, o) -> Ok ((v1, v2), o))) ;
-    descr = ppp1_.descr ^ ppp2_.descr }
+    descr = fun depth  -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
 
 let (-+) ppp1 ppp2 =
-  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
   fun () ->
+  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
   { printer = (fun o v2 ->
       ppp1_.printer o () ;
       ppp2_.printer o v2) ;
@@ -491,11 +499,11 @@ let (-+) ppp1 ppp2 =
       match ppp1_.scanner i o with
       | Error _ as e -> e
       | Ok ((), o) -> ppp2_.scanner i o) ;
-    descr = ppp1_.descr ^ ppp2_.descr }
+    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
 
 let (+-) ppp1 ppp2 =
-  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
   fun () ->
+  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
   { printer = (fun o v1 ->
       ppp1_.printer o v1 ;
       ppp2_.printer o ()) ;
@@ -506,11 +514,11 @@ let (+-) ppp1 ppp2 =
         (match ppp2_.scanner i o with
         | Error _ as e -> e
         | Ok (_, o) -> Ok (v, o))) ;
-    descr = ppp1_.descr ^ ppp2_.descr }
+    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
 
 let (--) ppp1 ppp2 =
-  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
   fun () ->
+  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
   { printer = (fun o _ ->
       ppp1_.printer o () ;
       ppp2_.printer o ()) ;
@@ -521,11 +529,11 @@ let (--) ppp1 ppp2 =
         (match ppp2_.scanner i o with
         | Error _ as e -> e
         | Ok (_, o) -> Ok ((), o))) ;
-    descr = ppp1_.descr ^ ppp2_.descr }
+    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
 
 let (>>:) ppp (f,f') =
-  let ppp_ = ppp () in
   fun () ->
+  let ppp_ = ppp () in
   { printer = (fun o v -> ppp_.printer o (f v)) ;
     scanner = (fun i o ->
       match ppp_.scanner i o with
@@ -544,7 +552,7 @@ let cst s : unit t =
         let o = skip_blanks i (o + l) in
         Ok ((), o)
       else parse_error o (Printf.sprintf "Cannot find %S" s)) ;
-    descr = s }
+    descr = fun _ -> s }
 
 let bool : bool t =
   fun () ->
@@ -556,7 +564,7 @@ let bool : bool t =
         (match next_word_eq "false" i o with
         | true, o -> Ok (false, o)
         | _ -> parse_error o "Expected boolean")) ;
-    descr = "boolean" }
+    descr = fun _ -> "boolean" }
 (*$= bool & ~printer:id
   "true" (to_string bool true)
   "false" (to_string bool false)
@@ -589,103 +597,103 @@ let int128 : int128 t =
   fun () ->
   { printer = (fun o v -> o (Int128.to_string v)) ;
     scanner = (let open Int128 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "int128" }
+    descr = fun _ -> "int128" }
 
 let uint128 : uint128 t =
   fun () ->
   { printer = (fun o v -> o (Uint128.to_string v)) ;
     scanner = (let open Uint128 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "uint128" }
+    descr = fun _ -> "uint128" }
 
 let int64 : int64 t =
   fun () ->
   { printer = (fun o v -> o (Int64.to_string v)) ;
     scanner = (let open Int64 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "int64" }
+    descr = fun _ -> "int64" }
 
 let uint64 : uint64 t =
   fun () ->
   { printer = (fun o v -> o (Uint64.to_string v)) ;
     scanner = (let open Uint64 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "uint64" }
+    descr = fun _ -> "uint64" }
 
 let int56 : int56 t =
   fun () ->
   { printer = (fun o v -> o (Int56.to_string v)) ;
     scanner = (let open Int56 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "int56" }
+    descr = fun _ -> "int56" }
 
 let uint56 : uint56 t =
   fun () ->
   { printer = (fun o v -> o (Uint56.to_string v)) ;
     scanner = (let open Uint56 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "uint56" }
+    descr = fun _ -> "uint56" }
 
 let int48 : int48 t =
   fun () ->
   { printer = (fun o v -> o (Int48.to_string v)) ;
     scanner = (let open Int48 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "int48" }
+    descr = fun _ -> "int48" }
 
 let uint48 : uint48 t =
   fun () ->
   { printer = (fun o v -> o (Uint48.to_string v)) ;
     scanner = (let open Uint48 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "uint48" }
+    descr = fun _ -> "uint48" }
 
 let int40 : int40 t =
   fun () ->
   { printer = (fun o v -> o (Int40.to_string v)) ;
     scanner = (let open Int40 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "int40" }
+    descr = fun _ -> "int40" }
 
 let uint40 : uint40 t =
   fun () ->
   { printer = (fun o v -> o (Uint40.to_string v)) ;
     scanner = (let open Uint40 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "uint40" }
+    descr = fun _ -> "uint40" }
 
 let int32 : int32 t =
   fun () ->
   { printer = (fun o v -> o (Int32.to_string v)) ;
     scanner = (let open Int32 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "int32" }
+    descr = fun _ -> "int32" }
 
 let uint32 : uint32 t =
   fun () ->
   { printer = (fun o v -> o (Uint32.to_string v)) ;
     scanner = (let open Uint32 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "uint32" }
+    descr = fun _ -> "uint32" }
 
 let int16 : int16 t =
   fun () ->
   { printer = (fun o v -> o (Int16.to_string v)) ;
     scanner = (let open Int16 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "int16" }
+    descr = fun _ -> "int16" }
 
 let uint16 : uint16 t =
   fun () ->
   { printer = (fun o v -> o (Uint16.to_string v)) ;
     scanner = (let open Uint16 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "uint16" }
+    descr = fun _ -> "uint16" }
 
 let int8 : int8 t =
   fun () ->
   { printer = (fun o v -> o (Int8.to_string v)) ;
     scanner = (let open Int8 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "int8" }
+    descr = fun _ -> "int8" }
 
 let uint8 : uint8 t =
   fun () ->
   { printer = (fun o v -> o (Uint8.to_string v)) ;
     scanner = (let open Uint8 in generic_int_scanner of_int add mul zero neg) ;
-    descr = "uint8" }
+    descr = fun _ -> "uint8" }
 
 let int : int t =
   fun () ->
   { printer = (fun o v -> o (string_of_int v)) ;
     scanner = generic_int_scanner (fun x:int -> x) (+) ( * ) 0 (~-) ;
-    descr = "int" }
+    descr = fun _ -> "int" }
 (*$= int & ~printer:id
   "42" (to_string int 42)
   "-42" (to_string int (-42))
@@ -747,7 +755,7 @@ let float nan inf minf : float t =
             float_of_int (s * n) *. 10. ** float_of_int (es * exp - sc), oo)
         else parse_error o "Expected floating number"
       )) ;
-    descr = "float" }
+    descr = fun _ -> "float" }
 (*$= float & ~printer:id
   "-0.00010348413604" (to_string (float "nan" "inf" "-inf") (-0.00010348413604))
   "nan" (to_string (float "nan" "inf" "-inf") nan)
@@ -779,12 +787,12 @@ let float nan inf minf : float t =
  *)
 
 let option ?placeholder ppp =
+  fun () ->
   let ppp_ = ppp ()
   and placeholder_ =
     match placeholder with
     | None -> None
     | Some ppp -> Some (ppp ()) in
-  fun () ->
   { printer = (fun o -> function None -> (match placeholder_ with
                                           | None -> ()
                                           | Some p_ -> p_.printer o ())
@@ -800,9 +808,10 @@ let option ?placeholder ppp =
           | Ok (_, o') -> Ok (None, o')
           | Error _ -> err))) ;
     descr =
+      fun depth ->
       match placeholder_ with
-      | None -> "optional "^ ppp_.descr
-      | Some p_ -> ppp_.descr ^" or "^ p_.descr }
+      | None -> "optional "^ ppp_.descr (depth + 1)
+      | Some p_ -> ppp_.descr (depth + 1) ^" or "^ p_.descr (depth + 1) }
 (*$= option & ~printer:(function Error e -> string_of_error e | Ok (None, _) -> Printf.sprintf "none" | Ok (Some d, o) -> Printf.sprintf "(%d, %d)" d o)
   (Ok (Some 42,4)) (of_string (option (cst "{" -+ int +- cst "}")) "{42}" 0)
   (Ok (None,0))    (of_string (option (cst "{" -+ int +- cst "}")) "pas glop" 0)
@@ -814,8 +823,8 @@ let option ?placeholder ppp =
  *)
 
 let default v ppp =
-  let ppp_ = ppp () in
   fun () ->
+  let ppp_ = ppp () in
   { printer = ppp_.printer ;
     scanner = (fun i o ->
       match ppp_.scanner i o with
@@ -962,13 +971,13 @@ let skip_closed_groups opened i o =
  * based on the name. In both case the field combinator returns an
  * optional value depending if the field name match or not. *)
 type 'a u =
-  (string t -> bool -> 'a printer) *    (* name ppp, bool is: do we need a separator? *)
+  (string t -> bool -> 'a printer) *  (* name ppp, bool is: do we need a separator? *)
   (string -> 'a scanner) *  (* string is: field value that's going to be read *)
-  string                    (* how to build the type name *)
+  (int -> string) (* how to build the type name *)
 
 let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
-  let name_ppp_ = name_ppp () in
   fun () ->
+  let name_ppp_ = name_ppp () in
   { printer = (fun o x ->
       o opn ;
       p name_ppp false o x ;
@@ -1070,7 +1079,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                 | _ -> parse_error cls_pos (Printf.sprintf "Expected closing of union %S" cls))))
           | _ -> parse_error o' (Printf.sprintf "Expected separator %S" eq)))
       | _ -> parse_error o (Printf.sprintf "Expected opening of union %S" opn)) ;
-    descr }
+    descr = fun depth -> descr (depth + 1) }
 
 (* Combine two ppp into a pair of options. Notice that the most important
  * error, which is UnknownField, must bubble up so we can ignore it! *)
@@ -1086,7 +1095,9 @@ let alternative var_sep (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option *
       match s2 n i o with
       | Ok (x, o) -> Ok ((None, Some x), o)
       | Error e2 -> Error (best_error e1 e2)),
-  (id1 ^ var_sep ^ id2)
+  (fun depth ->
+     if depth > 12 then "..."
+     else id1 (depth+1) ^ var_sep ^ id2 (depth+1))
 
 let variant eq sep id_sep name (ppp : 'a t) : 'a u =
   (fun name_ppp need_sep o v ->
@@ -1098,8 +1109,10 @@ let variant eq sep id_sep name (ppp : 'a t) : 'a u =
   (fun n i o ->
     if n <> name then unknown_field o o name
     else let ppp_ = ppp () in ppp_.scanner i o),
-  (let ppp_ = ppp () in
-   if ppp_.descr = "" then name else name ^ id_sep ^ ppp_.descr)
+  (fun depth ->
+     let ppp_ = ppp () in
+     let d = ppp_.descr depth in
+     if d = "" then name else name ^ id_sep ^ d)
 
 (* Like unit but with no representation, useful for
  * constructor without arguments *)
@@ -1107,7 +1120,7 @@ let none : unit t =
   fun () ->
   { printer = (fun _o () -> ()) ;
     scanner = (fun _i o -> Ok ((), o)) ;
-    descr = "" }
+    descr = fun _ -> "" }
 (*$= none
   (Ok ((), 0)) (of_string none "" 0)
  *)
@@ -1158,11 +1171,11 @@ let none : unit t =
 type 'a merge_u = 'a option -> 'a option -> 'a option
 
 let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, descr : 'a u), (merge : 'a merge_u)) =
+  fun () ->
   (* In a record we assume there are nothing special to open/close a single
    * field. If not, add 2 parameters in the record: *)
   let nf = union "" "" eq groupings (cls::delims) name_ppp (p, s, descr) in
   let nf_ = nf () in
-  fun () ->
   { printer = (fun o v ->
       o opn ;
       p name_ppp false o v ;
@@ -1205,7 +1218,7 @@ let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, 
                         | Some r -> Ok (r, o + cls_len))
         | _ -> parse_error o (Printf.sprintf "Expected closing of record %S" cls))
       | _ -> parse_error o (Printf.sprintf "Expected opening of record %S" opn)) ;
-    descr = opn ^ descr ^ cls }
+    descr = fun depth -> opn ^ descr (depth + 1) ^ cls }
 
 (* But then we need a special combinator to also compute the merge of the pairs of pairs... *)
 let sequence field_sep ((psi1 : 'a u), (m1 : 'a merge_u)) ((psi2 : 'b u), (m2 : 'b merge_u)) : (('a option * 'b option) u * ('a option * 'b option) merge_u) =

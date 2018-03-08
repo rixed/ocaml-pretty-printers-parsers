@@ -117,7 +117,8 @@ let pattern_none = pattern_of_constr "None" None
 let pattern_unit = pattern_of_constr "()" None
 
 let value_binding_of_expr name expr =
-  let fun_expr = Exp.fun_ Asttypes.Nolabel None pattern_unit expr in
+  (* eta-expanse the applied [expr] *)
+  let fun_expr = Exp.fun_ Asttypes.Nolabel None pattern_unit (Exp.apply expr [ Asttypes.Nolabel, exp_of_unit ]) in
   Vb.mk ~attrs:[disable_warnings [8; 27; 39]] (pattern_of_var name) fun_expr
 
 let identifier_of_mod modident =
