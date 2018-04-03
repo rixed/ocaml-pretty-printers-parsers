@@ -113,6 +113,90 @@ type 'a r = { printer : 'a printer ;
               descr : int -> string }
 type 'a t = unit -> 'a r
 
+let rec skip_blanks i o =
+  let s = i o 1 in
+  if String.length s = 1 && is_blank s.[0] then skip_blanks i (o + 1)
+  else o
+
+(* Let's start with a PPP for no value, that swallows blanks: *)
+let blanks : unit t =
+  fun () ->
+  { printer = (fun _o () -> ()) ;
+    scanner = (fun i o ->
+      let o = skip_blanks i o in
+      Ok ((), o)) ;
+    descr = fun _ -> "" }
+
+(* Some combinators: *)
+
+let (++) ppp1 ppp2 =
+  fun () ->
+  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
+  { printer = (fun o (v1, v2) ->
+      ppp1_.printer o v1 ;
+      ppp2_.printer o v2) ;
+    scanner = (fun i o ->
+      match ppp1_.scanner i o with
+      | Error _ as e -> e
+      | Ok (v1, o) ->
+        (match ppp2_.scanner i o with
+        | Error _ as e -> e
+        | Ok (v2, o) -> Ok ((v1, v2), o))) ;
+    descr = fun depth  -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
+
+let (-+) ppp1 ppp2 =
+  fun () ->
+  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
+  { printer = (fun o v2 ->
+      ppp1_.printer o () ;
+      ppp2_.printer o v2) ;
+    scanner = (fun i o ->
+      match ppp1_.scanner i o with
+      | Error _ as e -> e
+      | Ok ((), o) -> ppp2_.scanner i o) ;
+    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
+
+let (+-) ppp1 ppp2 =
+  fun () ->
+  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
+  { printer = (fun o v1 ->
+      ppp1_.printer o v1 ;
+      ppp2_.printer o ()) ;
+    scanner = (fun i o ->
+      match ppp1_.scanner i o with
+      | Error _ as e -> e
+      | Ok (v, o) ->
+        (match ppp2_.scanner i o with
+        | Error _ as e -> e
+        | Ok (_, o) -> Ok (v, o))) ;
+    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
+
+let (--) ppp1 ppp2 =
+  fun () ->
+  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
+  { printer = (fun o _ ->
+      ppp1_.printer o () ;
+      ppp2_.printer o ()) ;
+    scanner = (fun i o ->
+      match ppp1_.scanner i o with
+      | Error _ as e -> e
+      | Ok ((), o) ->
+        (match ppp2_.scanner i o with
+        | Error _ as e -> e
+        | Ok (_, o) -> Ok ((), o))) ;
+    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
+
+let (>>:) ppp (f,f') =
+  fun () ->
+  let ppp_ = ppp () in
+  { printer = (fun o v -> ppp_.printer o (f v)) ;
+    scanner = (fun i o ->
+      match ppp_.scanner i o with
+      | Error _ as e -> e
+      | Ok (x, o) -> Ok (f' x, o)) ;
+    descr = ppp_.descr }
+
+
 (* Various I/O functions *)
 
 let to_string ppp v =
@@ -136,7 +220,7 @@ let string_reader s o l =
   String.sub s o len
 
 let of_string ppp s =
-  let ppp_ = ppp () in
+  let ppp_ = (ppp +- blanks) () in
   ppp_.scanner (string_reader s)
 
 let chop s = chop_sub s 0 (String.length s)
@@ -244,6 +328,7 @@ let of_seekable_in_channel ppp ic =
   ppp_.scanner reader
 
 let of_in_channel ?buf_capacity ppp ic =
+  let ppp = ppp +- blanks in
   (* If this is not seekable then we will need a buffer: *)
   match seek_in ic 0 with
   | exception _ ->
@@ -263,11 +348,6 @@ let of_stdin ?buf_capacity ppp =
 let next_eq w i o =
   if stream_starts_with i o w then true, o + String.length w
   else false, o
-
-let rec skip_blanks i o =
-  let s = i o 1 in
-  if String.length s = 1 && is_blank s.[0] then skip_blanks i (o + 1)
-  else o
 
 (* Parse a given char - useful with combinators *)
 let char_cst c : unit t =
@@ -361,7 +441,7 @@ let identifier : string t =
     descr = fun _ -> "identifier" }
 (*$= identifier & ~printer:(function Error e -> string_of_error e | Ok (i, o) -> Printf.sprintf "(%s,%d)" i o)
   (Ok ("glop", 4)) (of_string identifier "glop" 0)
-  (Ok ("glop", 4)) (of_string identifier "glop\n" 0)
+  (Ok ("glop", 5)) (of_string identifier "glop\n" 0)
   (Ok ("glop0", 5)) (of_string identifier "glop0" 0)
 *)
 (*$inject let is_error = function Error _ -> true | _ -> false *)
@@ -473,73 +553,6 @@ let seq name opn cls sep fold of_rev_list ppp =
   (Ok (["a";"b";"cde"], 9)) \
     (of_string (seq "sequence" "" "" "--" List.fold_left List.rev identifier) "a--b--cde" 0)
  *)
-
-let (++) ppp1 ppp2 =
-  fun () ->
-  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
-  { printer = (fun o (v1, v2) ->
-      ppp1_.printer o v1 ;
-      ppp2_.printer o v2) ;
-    scanner = (fun i o ->
-      match ppp1_.scanner i o with
-      | Error _ as e -> e
-      | Ok (v1, o) ->
-        (match ppp2_.scanner i o with
-        | Error _ as e -> e
-        | Ok (v2, o) -> Ok ((v1, v2), o))) ;
-    descr = fun depth  -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
-
-let (-+) ppp1 ppp2 =
-  fun () ->
-  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
-  { printer = (fun o v2 ->
-      ppp1_.printer o () ;
-      ppp2_.printer o v2) ;
-    scanner = (fun i o ->
-      match ppp1_.scanner i o with
-      | Error _ as e -> e
-      | Ok ((), o) -> ppp2_.scanner i o) ;
-    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
-
-let (+-) ppp1 ppp2 =
-  fun () ->
-  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
-  { printer = (fun o v1 ->
-      ppp1_.printer o v1 ;
-      ppp2_.printer o ()) ;
-    scanner = (fun i o ->
-      match ppp1_.scanner i o with
-      | Error _ as e -> e
-      | Ok (v, o) ->
-        (match ppp2_.scanner i o with
-        | Error _ as e -> e
-        | Ok (_, o) -> Ok (v, o))) ;
-    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
-
-let (--) ppp1 ppp2 =
-  fun () ->
-  let ppp1_ = ppp1 () and ppp2_ = ppp2 () in
-  { printer = (fun o _ ->
-      ppp1_.printer o () ;
-      ppp2_.printer o ()) ;
-    scanner = (fun i o ->
-      match ppp1_.scanner i o with
-      | Error _ as e -> e
-      | Ok ((), o) ->
-        (match ppp2_.scanner i o with
-        | Error _ as e -> e
-        | Ok (_, o) -> Ok ((), o))) ;
-    descr = fun depth -> ppp1_.descr (depth + 1) ^ ppp2_.descr (depth + 1) }
-
-let (>>:) ppp (f,f') =
-  fun () ->
-  let ppp_ = ppp () in
-  { printer = (fun o v -> ppp_.printer o (f v)) ;
-    scanner = (fun i o ->
-      match ppp_.scanner i o with
-      | Error _ as e -> e
-      | Ok (x, o) -> Ok (f' x, o)) ;
-    descr = ppp_.descr }
 
 (* Always allow blanks around the constant *)
 let cst s : unit t =
