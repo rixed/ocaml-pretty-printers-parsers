@@ -12,7 +12,8 @@ SOURCES = $(PPP_SOURCES) PPP_Unix.ml
 
 all: .depend \
 		 ppx_ppp.opt ppx_test.opt ppx_test_source.ml \
-		 PPP.cma PPP.cmxa PPP-unix.cma PPP-unix.cmxa
+		 PPP.cma PPP.cmxa PPP-unix.cma PPP-unix.cmxa \
+		 pretty_please
 
 %.cmo %.annot: %.ml
 	ocamlfind ocamlc   $(OCAMLFLAGS) -package stdint -c $<
@@ -49,6 +50,10 @@ ppx_test.opt: PPP.cmxa PPP-unix.cmxa ppx_test.cmx
 ppx_test_source.ml: ppx_test.ml PPP.cmxa PPP-unix.cmxa ppx_ppp.opt
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -package stdint,unix -ppx ./ppx_ppp.opt PPP.cmxa PPP-unix.cmxa -c $< -dsource 2> $@
 
+# Pretty Please
+pretty_please: PPP_prettify.cmx pretty_please.ml
+	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -linkpkg $^ -o $@
+
 clean:
 	$(RM) *.cm[iox] *.cmxs *.a *.s *.o .depend *.annot all_tests.*
 
@@ -71,7 +76,7 @@ check: all_tests.opt ppx_test.opt
 
 # Installation
 
-INSTALLED = \
+INSTALLED_LIB = \
 	META PPP.cmxa PPP.cma PPP.a \
 	PPP.cmx PPP.cmi PPP.cmo \
 	PPP-unix.cmxa PPP-unix.cma PPP-unix.a \
@@ -81,11 +86,18 @@ INSTALLED = \
 	PPP_CSV.cmx PPP_CSV.cmi PPP_CSV.cmo \
 	PPP_prettify.cmx PPP_prettify.cmi PPP_prettify.cmo \
 	ppx_ppp.opt
+INSTALLED_BIN = pretty_please
+INSTALLED = $(INSTALLED_LIB) $(INSTALLED_BIN)
+
+bin_dir ?= /usr/bin/
 
 install: $(INSTALLED)
-	ocamlfind install ppp $^
+	ocamlfind install ppp $(INSTALLED_LIB)
+	install -d $(prefix)$(bin_dir)
+	install $(INSTALLED_BIN) $(prefix)$(bin_dir)/
 
 uninstall:
+	$(RM) $(bin_dir)/$(INSTALLED_BIN)
 	ocamlfind remove ppp
 
 reinstall: uninstall install

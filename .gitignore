@@ -13,3 +13,4 @@ oUnit-anon.cache
 all_tests.*
 ppx_test_source.ml
 ppx_test.actual
+pretty_please

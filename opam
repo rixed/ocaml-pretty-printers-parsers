@@ -5,8 +5,8 @@ maintainer: "Cedric Cellier <rixed@happyleptic.org>"
 authors: "Cedric Cellier <rixed@happyleptic.org>"
 build: [ [make] ]
 build-test: [ [make "check"] ]
-install: [make "install"]
-remove: ["ocamlfind" "remove" "ppp"]
+install: [make "bin_dir=%{bin}%" "install"]
+remove: [make "bin_dir=%{bin}%" "uninstall"]
 depends: [
   "stdint"
   "ppx_tools"
