@@ -9,7 +9,7 @@ install: [make "bin_dir=%{bin}%" "install"]
 remove: [make "bin_dir=%{bin}%" "uninstall"]
 depends: [
   "stdint"
-  "ppx_tools"
+  "ppx_tools" {build}
   "ocamlfind" {build}
   "qcheck" {test}
 ]

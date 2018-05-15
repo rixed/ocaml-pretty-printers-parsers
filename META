@@ -3,7 +3,7 @@ version = "2.2"
 archive(byte) = "PPP.cma"
 archive(native) = "PPP.cmxa"
 ppx = "./ppx_ppp.opt"
-requires = "stdint ppx_tools"
+requires = "stdint"
 
 package "unix" (
 	archive(byte) = "PPP-unix.cma"
