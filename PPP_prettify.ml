@@ -121,7 +121,7 @@ let split_verbatim
       ?(quotes=[ '"','"' ; '\'','\'' ])
       ?(escape_char=Some '\\') (* Force to None to disable *)
       k =
-  let end_verbatim = ref None in
+  let end_verbatim = ref None in (* the quote sign that ends a verbatim *)
   let next_escaped = ref false in
   function
     | Chr c when !end_verbatim <> None && !next_escaped ->
@@ -143,7 +143,7 @@ let split_verbatim
             k x
         | q ->
             end_verbatim := Some q ;
-            k x)
+            k (Verbatim c))
     | EOF as x -> k x
     | Verbatim _ as x -> k x
 
@@ -208,7 +208,7 @@ let reindent ?(indent="\t")
     ) in
   fun x ->
     match x, !stack with
-    | Chr c, cls::stk when cls = c ->
+    | Chr c, cls::stk when cls = c -> (* got the close we were waiting for *)
         output (Chr '\n') ;
         stack := stk ;
         add_indent () ;
@@ -237,7 +237,7 @@ let reindent ?(indent="\t")
         had_indent := false ;
         output x
 
-let no_trainling_blanks ?(blanks=" \t") k =
+let no_trailing_blanks ?(blanks=" \t") k =
   let last_blanks = ref [] in
   let flush () =
     List.rev !last_blanks |>
@@ -306,13 +306,27 @@ let remove_blanks ?(blanks=" \t") k = function
   | Chr c when is_in blanks c -> ()
   | x -> k x
 
+let newline_at_end_of_file k =
+  let last_chr = ref None in
+  function
+  | EOF ->
+      if !last_chr <> Some (Chr '\n') &&
+         !last_chr <> Some (Verbatim '\n')
+      then
+        k (Verbatim '\n') ;
+      k EOF
+  | x ->
+      last_chr := Some x ;
+      k x
+
 let prettifier ?blanks ?quotes ?escape_char ?indent ?pars ?columns ?separators k =
-  split_verbatim ?quotes ?escape_char (
-    compress_blanks ?blanks (
-      reindent ?indent ?pars (
-        add_newlines ?columns ?blanks ?separators (
-          remove_empty_lines ?blanks (
-            no_trainling_blanks ?blanks k)))))
+  newline_at_end_of_file (
+    split_verbatim ?quotes ?escape_char (
+      compress_blanks ?blanks (
+        reindent ?indent ?pars (
+          add_newlines ?columns ?blanks ?separators (
+            remove_empty_lines ?blanks (
+              no_trailing_blanks ?blanks k))))))
 
 let prettify ?blanks ?quotes ?escape_char ?indent ?pars ?columns =
   make_prettifier (prettifier ?blanks ?quotes ?escape_char ?indent ?pars ?columns)
