@@ -332,13 +332,15 @@ let prettify ?blanks ?quotes ?escape_char ?indent ?pars ?columns =
   make_prettifier (prettifier ?blanks ?quotes ?escape_char ?indent ?pars ?columns)
 
 (*$= prettify & ~printer:id
-  "glop" (prettify "glop")
+  "glop\n" (prettify "glop")
   {|(\
 	glop\
-)|} (prettify "(glop)")
+)\
+|} (prettify "(glop)")
   {|(\
 	glop [\
 		"glop  (pas  glop)"\
 	]\
-)|} (prettify "(glop   [ \"glop  (pas  glop)\" ])")
+)\
+|} (prettify "(glop   [ \"glop  (pas  glop)\" ])")
  *)
