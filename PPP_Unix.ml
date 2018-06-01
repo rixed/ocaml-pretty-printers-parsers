@@ -5,5 +5,5 @@ open PPP
  * without depending on the extra libs (here: unix): *)
 
 type inet_addr = Unix.inet_addr
-let inet_addr : Unix.inet_addr t = 
+let inet_addr : Unix.inet_addr t =
   string >>: Unix.(string_of_inet_addr, inet_addr_of_string)
