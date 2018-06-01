@@ -10,7 +10,7 @@ module B = struct
 
   type t3 = { foo : int [@ppp_default 17] ;
               bar : bool ;
-              recursive : t3 list [@ppp_ignore []] } [@@ppp PPP_OCaml]
+              recursive : t3 list [@ppp_default []] } [@@ppp PPP_OCaml]
 
   type t4 = Foo of int | Bar of string * int * bool | Baz [@@ppp PPP_OCaml] [@@ppp PPP_JSON]
 end
@@ -89,7 +89,7 @@ let () =
   test_string_conv t7_ppp_ocaml "Zap{a=None}" ;
   test_string_conv B.t3_ppp_ocaml "{ foo=42; bar=false }" ;
   test_string_conv B.t3_ppp_ocaml "{ foo=42; bar =true; }" ;
-  test_string_conv B.t3_ppp_ocaml "{ bar =true; }" ;
+  test_string_conv B.t3_ppp_ocaml "{ bar =true; recursive=[ {foo=1; bar=true; recursive=[]} ] }" ;
   test_string_conv t8_ppp_ocaml "(1, \"2\", true, 4.)" ;
   test_string_conv t8_ppp_ocaml "(1, \" escaped:\\\" \", true, 0)" ;
   test_string_conv t9_ppp_ocaml "{u40 = 42190; u56=429000 ; i48 = -42 }" ;
