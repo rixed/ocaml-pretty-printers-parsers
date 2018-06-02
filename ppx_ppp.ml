@@ -435,11 +435,11 @@ let variant_exp_of_constructor_decl impl_mod constructor_decl =
         exp_of_label_decls ~extensible:false ~constr_name impl_mod lst))
 
 (* Receive [ Some "a"; Some "b"; None ] and returns the pattern for
- * Some (Some a, Some b), _ *)
+ * Some (Some a, Some b), None *)
 let leftist_option_tree_mono_pattern variable_names =
   let some_of p = pattern_of_constr "Some" (Some p) in
   let some_of_var = function
-    | None -> Pat.any (), true
+    | None -> pattern_none, true
     | Some (nb_args, x) ->
       some_of (if nb_args > 0 then pattern_of_n_vars nb_args x else Pat.any ()),
       false in
