@@ -5,79 +5,6 @@ include PPP.Ops
   let to_string = PPP.to_string
  *)
 
-let unit : unit PPP.t = cst "null"
-(*$= unit
-  (Ok ((), 4)) (of_string unit "null" 0)
- *)
-
-let char = PPP.char "\""
-
-(* We cannot use "null" to represent nan or inf since that would turn
- * all None float options into nans *)
-let float = PPP.float "\"nan\"" "\"inf\"" "\"-inf\""
-
-let option ppp = PPP.option ~placeholder:(cst "null") ppp
-
-let list (ppp : 'a PPP.t) : 'a list PPP.t =
-  PPP.seq "list" "[" "]" "," List.fold_left List.rev ppp
-
-let array x = list x >>: (Array.to_list, Array.of_list)
-
-let hashtbl (pppk : 'k PPP.t) (pppv : 'v PPP.t) : ('k, 'v) Hashtbl.t PPP.t =
-  (* JSON keys are restricted to strings... *)
-  let pppk_ = pppk () in
-  let pppk =
-    if pppk_.descr 0 = "string" then pppk
-    else PPP.char_cst '"' -+ pppk +- PPP.char_cst '"' in
-  PPP.hashtbl "{" "}" "," (cst ":") pppk pppv
-
-let groupings = [ "{","}" ; "[","]" ]
-let delims = [ "," ; ":" ]
-
-let record ?extensible x =
-  PPP.record ?extensible "{" "}" ":" "," groupings delims string x
-let (<->) x y = PPP.sequence "; " x y
-let field ?default name x = PPP.field ":" ", " ": " ?default name x
-
-let union x = PPP.union "{" "}" ":" groupings delims string x
-let (|||) x y = PPP.alternative " | " x y
-let variant name x = PPP.variant ":" "" " of " name x
-let none = cst "null"
-
-let tuple_open = "["
-let tuple_close = "]"
-let tuple_sep = ","
-
-let pair (p1 : 'a PPP.t) (p2 : 'b PPP.t) : ('a * 'b) PPP.t =
-  record (
-    field "fst" p1 <->
-    field "snd" p2) >>:
-  ((fun (v1, v2) -> Some v1, Some v2),
-   (function Some v1, Some v2 -> v1, v2
-           | _ -> assert false))
-
-let triple (p1 : 'a PPP.t) (p2 : 'b PPP.t) (p3 : 'c PPP.t) : ('a * 'b * 'c) PPP.t =
-  record (
-    field "fst" p1 <->
-    field "snd" p2 <->
-    field "thrd" p3) >>:
-    ((fun (v1,v2,v3) -> Some (Some v1, Some v2), Some v3),
-     (function Some (Some v1, Some v2), Some v3 -> v1,v2,v3
-             | _ -> assert false))
-
-let result ok_ppp err_ppp = union (
-  variant "Ok" ok_ppp |||
-  variant "Err" err_ppp) >>:
-  ((function Ok x -> Some x, None
-           | Error e -> None, Some e),
-   (function Some x, _-> Ok x
-           | _, Some e -> Error e
-           | _ -> assert false))
-(*$= result & ~printer:id
-  "{\"Err\":\"test\"}" (to_string (result int string) (Error "test"))
-  "{\"Ok\":42}"        (to_string (result int string) (Ok 42))
- *)
-
 (* JSON wants UTF-8 chars encoded as \u007B *)
 
 let read_next_utf8_char s o =
@@ -222,3 +149,76 @@ let string : string PPP.t =
   Q.(pair printable_string (small_list int)) (test_id (pair string (list int)))
   Q.(array_of_size Gen.small_int (pair (small_list int) bool)) (test_id (array (pair (list int) bool)))
 *)
+let unit : unit PPP.t = cst "null"
+(*$= unit
+  (Ok ((), 4)) (of_string unit "null" 0)
+ *)
+
+let char = PPP.char "\""
+
+(* We cannot use "null" to represent nan or inf since that would turn
+ * all None float options into nans *)
+let float = PPP.float "\"nan\"" "\"inf\"" "\"-inf\""
+
+let option ppp = PPP.option ~placeholder:(cst "null") ppp
+
+let list (ppp : 'a PPP.t) : 'a list PPP.t =
+  PPP.seq "list" "[" "]" "," List.fold_left List.rev ppp
+
+let array x = list x >>: (Array.to_list, Array.of_list)
+
+let hashtbl (pppk : 'k PPP.t) (pppv : 'v PPP.t) : ('k, 'v) Hashtbl.t PPP.t =
+  (* JSON keys are restricted to strings... *)
+  let pppk_ = pppk () in
+  let pppk =
+    if pppk_.descr 0 = "string" then pppk
+    else PPP.char_cst '"' -+ pppk +- PPP.char_cst '"' in
+  PPP.hashtbl "{" "}" "," (cst ":") pppk pppv
+
+let groupings = [ "{","}" ; "[","]" ]
+let delims = [ "," ; ":" ]
+
+let record ?extensible x =
+  PPP.record ?extensible "{" "}" ":" "," groupings delims string x
+let (<->) x y = PPP.sequence "; " x y
+let field ?default name x = PPP.field ":" ", " ": " ?default name x
+
+let union x = PPP.union "{" "}" ":" groupings delims string x
+let (|||) x y = PPP.alternative " | " x y
+let variant name x = PPP.variant ":" "" " of " name x
+let none = cst "null"
+
+let tuple_open = "["
+let tuple_close = "]"
+let tuple_sep = ","
+
+let pair (p1 : 'a PPP.t) (p2 : 'b PPP.t) : ('a * 'b) PPP.t =
+  record (
+    field "fst" p1 <->
+    field "snd" p2) >>:
+  ((fun (v1, v2) -> Some v1, Some v2),
+   (function Some v1, Some v2 -> v1, v2
+           | _ -> assert false))
+
+let triple (p1 : 'a PPP.t) (p2 : 'b PPP.t) (p3 : 'c PPP.t) : ('a * 'b * 'c) PPP.t =
+  record (
+    field "fst" p1 <->
+    field "snd" p2 <->
+    field "thrd" p3) >>:
+    ((fun (v1,v2,v3) -> Some (Some v1, Some v2), Some v3),
+     (function Some (Some v1, Some v2), Some v3 -> v1,v2,v3
+             | _ -> assert false))
+
+let result ok_ppp err_ppp = union (
+  variant "Ok" ok_ppp |||
+  variant "Err" err_ppp) >>:
+  ((function Ok x -> Some x, None
+           | Error e -> None, Some e),
+   (function Some x, _-> Ok x
+           | _, Some e -> Error e
+           | _ -> assert false))
+(*$= result & ~printer:id
+  "{\"Err\":\"test\"}" (to_string (result int string) (Error "test"))
+  "{\"Ok\":42}"        (to_string (result int string) (Ok 42))
+ *)
+
