@@ -40,6 +40,9 @@ and t15 = T3 of t14 | T4 of string [@@ppp PPP_OCaml]
 (* Arrays: *)
 type t16 = int array [@@ppp PPP_OCaml]
 
+(* TODO: Parametric types *)
+(*type 'a t16 = 'a list [@@ppp PPP_OCaml]*)
+
 (* Now some JSON types *)
 
 type j1 = { field1 : int [@ppp_default 15];
@@ -66,8 +69,8 @@ type j9 = { foo : int ; hash : (int, float) Hashtbl.t } [@@ppp PPP_JSON]
 type j10 = { hash : (string, bool) Hashtbl.t } [@@ppp PPP_JSON]
 type j11 = PasJlop | Jlop of { c:int; d:j8 option } [@@ppp PPP_JSON]
 
-type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON]
-type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON]
+type arrt = AU64 of uint64 array | AU32 of uint32 array | AFloat of float array [@@ppp PPP_JSON] [@@ppp PPP_OCaml]
+type export_msg = { first : int ; columns : (string * bool * arrt) list } [@@ppp PPP_JSON] [@@ppp PPP_OCaml]
 
 let () =
   let mouline ppp str =
@@ -102,6 +105,8 @@ let () =
   test_string_conv t13_ppp_ocaml "{ addr = \"192.168.0.42\" }" ;
   test_string_conv t14_ppp_ocaml "T1 (T3 (T2 42))" ;
   test_string_conv t16_ppp_ocaml "[| 1; 2; 3 |]" ;
+  test_string_conv export_msg_ppp_ocaml "{ columns = [ (\"h1\",false, AU64 [|1|] ) ]; first = 1 }" ;
+  test_string_conv export_msg_ppp_ocaml "{ first=1; columns= [ (\"h1\",false,AU64 [|1|]) ]}" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}" ;

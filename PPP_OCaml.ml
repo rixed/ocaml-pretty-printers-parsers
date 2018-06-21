@@ -97,7 +97,7 @@ let triple = Tuple.tuple3
   (Ok ((0,"",0), 8)) (of_string (triple int string int) "(0,\"\",0)" 0)
  *)
 
-let groupings = [ "{","}" ; "[","]" ; "(",")" ; "[|","|]" ; "begin","end" ]
+let groupings = [ "{","}" ; "[|","|]" ; "[","]" ; "(",")" ; "begin","end" ]
 let delims = [ "," ; ";" ; "=>" ]
 
 let record ?extensible x =

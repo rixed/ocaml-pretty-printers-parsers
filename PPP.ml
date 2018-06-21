@@ -868,6 +868,7 @@ let list_print ep oc lst =
       ep e) lst ;
   Printf.fprintf oc "]"
 let string_print oc str = Printf.fprintf oc "%S" str
+let string_pair_print oc (s1, s2) = Printf.fprintf oc "(%S,%S)" s1 s2
 
 (* To be able to "reorder" records fields we need a function able to tell us
  * the length of a value, without knowing its type. If we have this, then we
@@ -917,6 +918,7 @@ and skip_group cls groupings delims i o =
       trace "skip_group: skip_any returned at pos %d" o ;
       let o = skip_blanks i o in
       if stream_starts_with i o cls then (
+        trace "skip_group: that's the end of this group, continue as %d." (o + clsl) ;
         Some (o + clsl)
       ) else (
         trace "skip_group: not the end of this group, we should have a delim (%a)."
@@ -949,17 +951,6 @@ let opened_group groupings i o =
   match List.find (fun (opn, _) -> stream_starts_with i o opn) groupings with
   | exception Not_found -> None
   | opn, _ as group -> Some (group, (o + String.length opn))
-
-(* Swallow opened groups *)
-let skip_opened_groups groupings i o =
-  let rec loop opened o =
-    let o = skip_blanks i o in
-    (* Look for a group opening at position o *)
-    match opened_group groupings i o with
-    | None -> opened, o
-    | Some (group, o) -> loop (group::opened) o
-  in
-  loop [] o
 
 (* Swallow closing groups (previously opened) *)
 let skip_closed_groups opened i o =
@@ -998,12 +989,8 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
     scanner = (fun i union_start ->
       let opn_len = String.length opn
       and cls_len = String.length cls in
-
       (* There could be some grouping, skip it (unless that's our opening). *)
-      let groupings' = List.filter (fun (o, _) -> o <> opn) groupings in
-      let opened, o = skip_opened_groups groupings' i union_start in
-      trace "union: found %d opened groups" (List.length opened) ;
-      let o = skip_blanks i o in
+      let o = skip_blanks i union_start in
       match i o opn_len with
       | str when str = opn ->
         trace "union: found union opn %S" opn ;
@@ -1026,70 +1013,64 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
             | None -> parse_error value_start (Printf.sprintf "Cannot delimit value for %S" name)
             | Some value_stop ->
               trace "union: found value, up to o=%d (starting at %d)" value_stop value_start ;
-              (* If there were some opened grouping at the beginning, then we
-               * must find them closed now: *)
-              (match skip_closed_groups opened i value_stop with
-              | None -> parse_error value_stop "Expected closing group"
-              | Some o ->
-                trace "union: found closed groupings" ;
-                let cls_pos = skip_blanks i o in
-                (* Check we have cls: *)
-                (match i cls_pos cls_len with
-                | str when str = cls ->
-                  trace "union: found cls %S" cls ;
-                  let chop_str = i value_start (cls_pos - value_start) in
-                  let _, value = chop_sub chop_str 0 (cls_pos - value_start) in
-                  trace "union: found value %S" value ;
-                  (* Here we have an issue. We may fail to parse the value in
-                   * case of extraneous groupings again. This is a bit annoying
-                   * since some parsers may depends on the groups to be present
-                   * (tuples...) so we cannot remove groups preemptively. We
-                   * have to try to parse again while removing the grouping
-                   * layers one by one. So for instance if we are given
-                   * (((1,2))) as a int pair, we must try first with 3, then 2
-                   * then 1 parentheses which will eventually succeed (notice 0
-                   * parentheses would fail). *)
-                  let rec try_ungroup opened i o =
-                    trace "union: trying to parse value for label %S" name ;
-                    match s name i o with
-                    | Ok (v, o) ->
-                      trace "union: parsed value!" ;
-                      (* If we had to open some groups, check we can now close
-                       * them: *)
-                      (match skip_closed_groups opened i o with
-                      | None ->
-                        trace "union: Cannot close %d opened groups around value %S" (List.length opened) value ;
-                        parse_error o "Expected closing group"
-                      | Some oo -> Ok (v, oo))
-                    | Error r as err ->
-                      trace "union: cannot parse value from %d (%s)"
-                        o (string_of_error r) ;
-                      (match opened_group groupings i o with
-                      | None ->
-                        trace "union: but this is not a group opening. Game over!" ;
-                        (* If the error was a name error, set the actual end of value: *)
-                        (match r with
-                        | o, UnknownField (n, _) ->
-                          Error (o, UnknownField (n, value_stop))
-                        | _ -> err)
-                      | Some (group, o) ->
-                        let o = skip_blanks i o in
-                        trace "union: retry from %d after the opened group" o ;
-                        try_ungroup (group::opened) i o)
-                  in
-                  let ii = string_reader value in
-                  (match try_ungroup [] ii 0 with
-                  | Error _ as e -> e
-                  | Ok (v, oo) -> (* oo is the offset in the value only *)
-                    let oo = skip_blanks ii oo in
-                    (* We should have read everything *)
-                    if oo = String.length value then
-                      Ok (v, cls_pos + cls_len)
-                    else (
-                      trace "union: garbage at end of value %S from offset %d" value oo ;
-                      parse_error oo (Printf.sprintf "Garbage at end of value for %S" name)
-                    ))
-                | _ -> parse_error cls_pos (Printf.sprintf "Expected closing of union %S" cls))))
+              let cls_pos = skip_blanks i value_stop in
+              (* Check we have cls: *)
+              (match i cls_pos cls_len with
+              | str when str = cls ->
+                trace "union: found cls %S at %d" cls cls_pos ;
+                let chop_str = i value_start (cls_pos - value_start) in
+                let _, value = chop_sub chop_str 0 (cls_pos - value_start) in
+                trace "union: found value %S" value ;
+                (* Here we have an issue. We may fail to parse the value in
+                 * case of extraneous groupings again. This is a bit annoying
+                 * since some parsers may depends on the groups to be present
+                 * (tuples...) so we cannot remove groups preemptively. We
+                 * have to try to parse again while removing the grouping
+                 * layers one by one. So for instance if we are given
+                 * (((1,2))) as a int pair, we must try first with 3, then 2
+                 * then 1 parentheses which will eventually succeed (notice 0
+                 * parentheses would fail). *)
+                let rec try_ungroup opened i o =
+                  trace "union: trying to parse value for label %S" name ;
+                  match s name i o with
+                  | Ok (v, o) ->
+                    trace "union: parsed value!" ;
+                    (* If we had to open some groups, check we can now close
+                     * them: *)
+                    (match skip_closed_groups opened i o with
+                    | None ->
+                      trace "union: Cannot close %d opened groups around value %S" (List.length opened) value ;
+                      parse_error o "Expected closing group"
+                    | Some oo -> Ok (v, oo))
+                  | Error r as err ->
+                    trace "union: cannot parse value from %d (%s)"
+                      o (string_of_error r) ;
+                    (match opened_group (* FIXME: another type of groups here, with just "(",")" *) groupings i o with
+                    | None ->
+                      trace "union: but this is not a group opening. Game over!" ;
+                      (* If the error was a name error, set the actual end of value: *)
+                      (match r with
+                      | o, UnknownField (n, _) ->
+                        Error (o, UnknownField (n, value_stop))
+                      | _ -> err)
+                    | Some (group, o) ->
+                      let o = skip_blanks i o in
+                      trace "union: retry from %d after the opened group" o ;
+                      try_ungroup (group::opened) i o)
+                in
+                let ii = string_reader value in
+                (match try_ungroup [] ii 0 with
+                | Error _ as e -> e
+                | Ok (v, oo) -> (* oo is the offset in the value only *)
+                  let oo = skip_blanks ii oo in
+                  (* We should have read everything *)
+                  if oo = String.length value then
+                    Ok (v, cls_pos + cls_len)
+                  else (
+                    trace "union: garbage at end of value %S from offset %d" value oo ;
+                    parse_error oo (Printf.sprintf "Garbage at end of value for %S" name)
+                  ))
+              | _ -> parse_error cls_pos (Printf.sprintf "Expected closing of union %S" cls)))
           | _ -> parse_error o' (Printf.sprintf "Expected separator %S" eq)))
       | _ -> parse_error o (Printf.sprintf "Expected opening of union %S" opn)) ;
     descr = fun depth -> descr (depth + 1) }
