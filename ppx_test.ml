@@ -37,6 +37,9 @@ type t13 = { addr : Unix.inet_addr } [@@ppp PPP_OCaml]
 type t14 = T1 of t15 | T2 of int [@@ppp PPP_OCaml]
 and t15 = T3 of t14 | T4 of string [@@ppp PPP_OCaml]
 
+(* Arrays: *)
+type t16 = int array [@@ppp PPP_OCaml]
+
 (* Now some JSON types *)
 
 type j1 = { field1 : int [@ppp_default 15];
@@ -98,6 +101,7 @@ let () =
   test_string_conv t12_ppp_ocaml "{ f1 = [1;2;3] }" ;
   test_string_conv t13_ppp_ocaml "{ addr = \"192.168.0.42\" }" ;
   test_string_conv t14_ppp_ocaml "T1 (T3 (T2 42))" ;
+  test_string_conv t16_ppp_ocaml "[| 1; 2; 3 |]" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field3\": \"z\", \"field4\": null}" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 1, \"field5\": true}" ;
