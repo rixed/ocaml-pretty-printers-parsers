@@ -48,12 +48,20 @@ let json_encoded_string s =
         | 0x9  -> "\\t"
         | uc   ->
           assert (uc < 128 && uc >= 0) ;
-          String.make 1 (Char.chr uc)
+          if uc <= 0x1F then (* must be escaped *)
+            Printf.sprintf "\\u%04x" uc
+          else
+            String.make 1 (Char.chr uc)
       else Printf.sprintf "\\u%04x" uc
     in
     loop (c :: cs) (o + sz)
   in
   (loop ["\""] 0) ^ "\""
+
+(*$= json_encoded_string & ~printer:id
+  "\"glop\"" (json_encoded_string "glop")
+  "\"\\u001b[0m\"" (json_encoded_string "\027[0m")
+*)
 
 let utf_bytes_of_code_point c =
   assert (c >= 0) ;
