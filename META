@@ -6,7 +6,7 @@ ppx = "./ppx_ppp.opt"
 requires = "stdint"
 
 package "unix" (
-	archive(byte) = "PPP-unix.cma"
-	archive(native) = "PPP-unix.cmxa"
-	requires = "unix"
+  archive(byte) = "PPP-unix.cma"
+  archive(native) = "PPP-unix.cmxa"
+  requires = "unix"
 )

@@ -43,6 +43,8 @@ let str_is_digit s = String.length s > 0 && is_digit s.[0]
 let digit_of s = Char.code s.[0] - zero
 
 let chop_sub s b e =
+  let len = String.length s in
+  if e > len || b > len || e < 0 || b < 0 then invalid_arg "chop_sub" ;
   (* Also return the nb of chars chopped at the beginning. Useful later to
    * compute offset in the user provided string from the offset in chopped
    * string. *)
@@ -1329,6 +1331,7 @@ struct
   let list ppp = seq "list" "(" ")" ";" List.fold_left List.rev ppp
   let array ppp = seq "array" "(" ")" ";" Array.fold_left (fun l -> Array.of_list (List.rev l)) ppp
   let hashtbl pppk pppv = hashtbl "{" "}" ";" (cst "=>") pppk pppv
+  (* TODO: set, map... *)
   let unit = cst "_"
   let none = none
   let option = option

@@ -117,7 +117,7 @@ let string : string PPP.t =
           PPP.parse_error o ("invalid escaped character in JSON string: "^ s)
       in
       try loop o [] 0 First
-      with Failure _ -> PPP.parse_error o "invalid UTF-9 encoding") ;
+      with Failure _ -> PPP.parse_error o "invalid UTF-8 encoding") ;
     PPP.descr = fun _ -> "string" }
 (*$= string & ~printer:id
    "\"glop\"" (to_string string "glop")
