@@ -66,13 +66,18 @@ let is_in str c =
       true
   with Not_found -> false
 
-type chr = Chr of char | Verbatim of char | EOF
+type chr = Chr of char | Verbatim of char
+         | Open of string | Close of string | Token of string (* used by indenter *)
+         | EOF
 
+(* Takes a string, makes it a stream of Chr, give it to the function [f], and
+ * convert back the output into a string: *)
 let make_prettifier f str =
   let len = String.length str in
   let buf = Buffer.create (len * 2) in
   let k = function
     | Chr c | Verbatim c -> Buffer.add_char buf c
+    | Open s | Close s | Token s -> Buffer.add_string buf s
     | EOF -> () in
   let f = f k in
   String.iter (fun c -> f (Chr c)) str ;
@@ -81,27 +86,30 @@ let make_prettifier f str =
 
 type blank = Nope | Trim | NewLine | Space
 
+(* Replace successive blank Chr by a single space or newline: *)
 let compress_blanks ?(blanks=" \t") k =
+  (* Remembers the most important blank encountered: *)
   let blank = ref Trim in
+  (* Add b to the aggregated blanks: *)
   let compress b =
     match !blank with
-    | Nope | Space -> b
-    | Trim | NewLine -> !blank in
+    | Nope | Space -> blank := b (* promote to b *)
+    | Trim | NewLine -> () in
+  (* Output the aggregated blank: *)
   let flush_blank () =
-    match !blank with
+    (match !blank with
     | Nope | Trim -> ()
     | NewLine -> k (Chr '\n')
-    | Space -> k (Chr ' ') in
+    | Space -> k (Chr ' ')) ;
+    blank := Nope
+  in
   function
-    | Chr '\n' ->
-        blank := compress NewLine
-    | Chr c when is_in blanks c ->
-        blank := compress Space
+    | Chr '\n' -> compress NewLine
+    | Chr c when is_in blanks c -> compress Space
     | Chr _ as x ->
         flush_blank () ;
-        blank := Nope ;
         k x
-    | Verbatim _ as x ->
+    | Verbatim _ | Open _ | Close _ | Token _ as x ->
         k x
     | EOF as x ->
         blank := Trim ;
@@ -117,6 +125,7 @@ let compress_blanks ?(blanks=" \t") k =
   "pas glop" (make_prettifier compress_blanks " pas  glop  ")
  *)
 
+(* Turn the Chr that are surrounded by quotes into Verbatim characters: *)
 let split_verbatim
       ?(quotes=[ '"','"' ; '\'','\'' ])
       ?(escape_char=Some '\\') (* Force to None to disable *)
@@ -145,8 +154,54 @@ let split_verbatim
             end_verbatim := Some q ;
             k (Verbatim c))
     | EOF as x -> k x
-    | Verbatim _ as x -> k x
+    | Verbatim _ | Open _ | Close _ | Token _ as x -> k x
 
+(* Replace sequence of Chr that look like a open group, a close group, or a
+ * token group, by actual Open, Close and Token items. *)
+let tokenize
+      ?(opens=["{|"; "[|"; "(|"; "<|"; "("; "{"; "["; "<"])
+      ?(closes=["|}"; "|]"; "|)"; "|>"; ")"; "}"; "]"; ">"])
+      ?(tokens=["=="; "=>"; "<="; "->"; "<-"; ":="; "=:"; "="])
+      k =
+  let last_chr = ref None in
+  let group_of s =
+    if List.mem s opens then (
+      Open s
+    ) else if List.mem s closes then (
+      Close s
+    ) else if List.mem s tokens then (
+      Token s
+    ) else raise Not_found
+  in
+  fun x ->
+    match x, !last_chr with
+    | Chr c, None ->
+        last_chr := Some c
+    | Chr c, Some last ->
+        (* Try a full match first: *)
+        let s = String.init 2 (function 0 -> last | _ -> c) in
+        (match group_of s with
+        | exception Not_found ->
+            (* Then maybe last_char alone? *)
+            let s = String.make 1 last in
+            (match group_of s with
+            | exception Not_found -> k (Chr last) ;
+            | grp -> k grp) ;
+            last_chr := Some c
+        | grp ->
+            k grp ;
+            last_chr := None)
+    | x, Some last ->
+        let s = String.make 1 last in
+        (match group_of s with
+        | exception Not_found -> k (Chr last)
+        | grp -> k grp) ;
+        last_chr := None ;
+        k x
+    | x, None ->
+        k x
+
+(* Suppress lines made only of blanks (or empty): *)
 let remove_empty_lines ?(blanks=" \t") k =
   let chars = ref [] in
   let has_content = ref false in
@@ -165,8 +220,9 @@ let remove_empty_lines ?(blanks=" \t") k =
         if not !has_content && not (is_in blanks c) then
           has_content := true
     | Verbatim _ ->
-        if not !has_content then
-          has_content := true
+        has_content := true
+    | Open s | Close s | Token s ->
+        if s <> "" then has_content := true
     | EOF ->
         let had_content = !has_content in
         flush_line () ;
@@ -179,23 +235,29 @@ let remove_empty_lines ?(blanks=" \t") k =
   "glop" (make_prettifier remove_empty_lines " \n\nglop")
  *)
 
+(* Look for pairs of matching Close/Open and indent them, leaving the Open at
+ * the end of its line and making the corresponding Close at the beginning of
+ * its. *)
 let reindent ?(indent="\t")
              ?(blanks=" \t")
              ?(pars=[ '(',')' ; '{','}' ; '[',']' ; '<','>' ])
              ?(separators=":=") k =
-  let stack = ref [] in
+  (* The number of currently opened groups: *)
+  let depth = ref 0 in
+  (* Tells if we just added the indentation at the beginning of the line, so
+   * that next blanks are ignored: *)
   let had_indent = ref true in
+  (* Tells if we just added a space, so that next spaces are ignored: *)
   let had_space = ref false in
+  (* Output a string as a sequence of Chr: *)
   let k_string = String.iter (fun c -> k (Chr c)) in
+  (* For each item of the stack, output the indent string: *)
   let add_indent () =
-    let rec loop = function
-      | [] -> ()
-      | _ :: rest ->
-          k_string indent ;
-          loop rest in
     had_indent := true ;
     had_space := false ;
-    loop !stack in
+    for i = 1 to !depth do
+      k_string indent
+    done in
   let output x =
     if x = Chr ' ' then (
       if not !had_space then (
@@ -204,41 +266,47 @@ let reindent ?(indent="\t")
       )
     ) else (
       k x ;
-      if !had_space then had_space := false
+      had_space := false
     ) in
   fun x ->
-    match x, !stack with
-    | Chr c, cls::stk when cls = c -> (* got the close we were waiting for *)
-        output (Chr '\n') ;
-        stack := stk ;
-        add_indent () ;
-        had_indent := false ;
-        output x ;
-    | Chr c, _ when is_in separators c ->
+    match x with
+    | Close s ->
+        if !depth = 0 then
+          Printf.eprintf "Unbalanced open/close groups (close %S)\n" s
+        else (
+          output (Chr '\n') ;
+          decr depth ;
+          add_indent () ;
+          had_indent := false ;
+          output x ;
+        )
+    | Token s -> (* Put some space around separators *)
         output (Chr ' ') ;
         output x ;
         output (Chr ' ')
-    | Chr c, _ ->
-        (match List.assoc c pars with
-        | exception Not_found ->
-            if !had_indent && is_in blanks c then (
-              (* swallow blanks after indent *)
-            ) else (
-              had_indent := false ;
-              output x
-            )
-        | cls ->
-            stack := cls :: !stack ;
-            if not !had_indent then output (Chr ' ') ;
-            output x ;
-            output (Chr '\n') ;
-            add_indent ())
-    | (Verbatim _ | EOF), _ ->
+    | Open s ->
+        incr depth ;
+        (* Adds space before the open group: *)
+        if not !had_indent then output (Chr ' ') ;
+        output x ;
+        output (Chr '\n') ;
+        add_indent ()
+    | Chr c ->
+        if !had_indent && is_in blanks c then (
+          (* swallow blanks after indent *)
+        ) else (
+          had_indent := false ;
+          output x
+        )
+    | Verbatim _ | EOF ->
         had_indent := false ;
         output x
 
+(* Suppress any trailing blanks: *)
 let no_trailing_blanks ?(blanks=" \t") k =
+  (* Accumulate all the successive blanks we've met but not output yet: *)
   let last_blanks = ref [] in
+  (* Do output all those blanks: *)
   let flush () =
     List.rev !last_blanks |>
     List.iter k ;
@@ -253,10 +321,15 @@ let no_trailing_blanks ?(blanks=" \t") k =
         flush () ;
         k x
 
+(* Limit the output lines to the given width, while preserving indentation, by
+ * substituting newlines for some of the blanks or adding newlines after
+ * separators: *)
 let add_newlines ?(columns=80) ?(blanks=" \t") ?(separators=",;") k =
   let curcol = ref 0 in
   let line_indent = ref [] in
+  (* Buffered items not yet output: *)
   let last_seq = ref [] in
+  (* Length in characters of last_seq: *)
   let last_seq_len = ref 0 in
   let had_content = ref false in (* Before the current seq *)
   let write lst =
@@ -276,9 +349,9 @@ let add_newlines ?(columns=80) ?(blanks=" \t") ?(separators=",;") k =
       last_seq_len := 0 ;
       had_content := true
     ) in
-  let append x =
+  let append x len =
     last_seq := x :: !last_seq ;
-    incr last_seq_len in
+    last_seq_len := !last_seq_len + len in
   function
     | Chr '\n' as x ->
         flush_seq () ;
@@ -294,53 +367,84 @@ let add_newlines ?(columns=80) ?(blanks=" \t") ?(separators=",;") k =
           k x
         )
     | (Chr c as x) when is_in separators c ->
-        append x ;
+        append x 1 ;
         flush_seq ()
     | Chr _ | Verbatim _ as x ->
-        append x
+        append x 1
+    | Open s | Close s | Token s as x ->
+        append x (String.length s)
     | EOF as x ->
         flush_seq () ;
         k x
 
-let remove_blanks ?(blanks=" \t") k = function
-  | Chr c when is_in blanks c -> ()
-  | x -> k x
-
+(* Fix improper output by not allowing the output to end without a newline: *)
 let newline_at_end_of_file k =
   let last_chr = ref None in
   function
   | EOF ->
-      if !last_chr <> Some (Chr '\n') &&
-         !last_chr <> Some (Verbatim '\n')
-      then
-        k (Verbatim '\n') ;
+      (match !last_chr with
+      | Some (Chr '\n') | Some (Verbatim '\n') -> ()
+      | Some (Open s) | Some (Close s) | Some (Token s)
+          when s <> "" && s.[String.length s - 1] = '\n' -> ()
+      | _ ->
+          k (Verbatim '\n')) ;
       k EOF
   | x ->
       last_chr := Some x ;
       k x
 
-let prettifier ?blanks ?quotes ?escape_char ?indent ?pars ?columns ?separators k =
-  newline_at_end_of_file (
-    split_verbatim ?quotes ?escape_char (
+let prettifier
+      ?blanks ?quotes ?escape_char
+      ?indent ?pars ?columns ?separators
+      ?opens ?closes ?tokens
+      k =
+  split_verbatim ?quotes ?escape_char (
+    tokenize ?opens ?closes ?tokens (
       compress_blanks ?blanks (
         reindent ?indent ?pars (
           add_newlines ?columns ?blanks ?separators (
             remove_empty_lines ?blanks (
-              no_trailing_blanks ?blanks k))))))
+              no_trailing_blanks ?blanks (
+                newline_at_end_of_file k)))))))
 
-let prettify ?blanks ?quotes ?escape_char ?indent ?pars ?columns =
-  make_prettifier (prettifier ?blanks ?quotes ?escape_char ?indent ?pars ?columns)
+let prettify
+      ?blanks ?quotes ?escape_char
+      ?indent ?pars ?columns ?separators
+      ?opens ?closes ?tokens =
+  make_prettifier (
+    prettifier
+      ?blanks ?quotes ?escape_char ?indent ?pars ?columns ?separators
+      ?opens ?closes ?tokens)
 
 (*$= prettify & ~printer:id
+  "\n" (prettify "")
+
+  "\n" (prettify "\n")
+
+  "{\n}\n" (prettify "{}")
+
+  "{\n}\n" (prettify "{}\n")
+
+  "{\n}\n" (prettify "\n{}\n")
+
+  "{\n}\n" (prettify "\n{\n}\n")
+
   "glop\n" (prettify "glop")
+
   {|(\
 	glop\
 )\
 |} (prettify "(glop)")
+
   {|(\
 	glop [\
 		"glop  (pas  glop)"\
 	]\
 )\
 |} (prettify "(glop   [ \"glop  (pas  glop)\" ])")
+
+  {|{\
+	key => "val=>ue"\
+}\
+|} (prettify "{key=>\"val=>ue\"}")
  *)
