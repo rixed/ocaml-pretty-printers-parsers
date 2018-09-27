@@ -513,7 +513,7 @@ let exp_of_constructor_arguments impl_mod constructor_decls =
         Exp.function_ [
           {
             pc_lhs =
-							(if construct_has_record constructor_decl then
+              (if construct_has_record constructor_decl then
                 pattern_of_var "x" else
               Pat.construct (ident_of_name constr_name)
                 (if has_args then Some (pattern_of_n_vars nb_args "x") else None)) ;
@@ -525,7 +525,7 @@ let exp_of_constructor_arguments impl_mod constructor_decls =
             pc_lhs = if has_args then pattern_of_n_vars nb_args "x" else failwith "not implemented" ;
             pc_guard = None ;
             pc_rhs =
-							if construct_has_record constructor_decl then
+              if construct_has_record constructor_decl then
                 exp_of_name "x" else
               exp_of_constr constr_name
                 (if has_args then Some (exp_of_n_names nb_args "x") else None)
@@ -541,43 +541,47 @@ let exp_of_constructor_arguments impl_mod constructor_decls =
       (* With the additional difficulty that constructor with a record attached
          have to be passed with their record. *)
       Exp.tuple [
-        Exp.function_ (List.mapi (fun i constructor_decl ->
-          let constr_name = constructor_decl.pcd_name.Asttypes.txt in
-          let nb_args = if construct_has_record constructor_decl then 1
-                        else construct_nb_args constructor_decl in
-          {
-            pc_lhs =
-              pattern_of_constr constr_name
-                (if nb_args > 0 then
-                  Some (pattern_of_n_vars nb_args "x") else None) ;
-            pc_guard = None ;
-            pc_rhs =
-              let my_value =
-                (* TODO: could we not do this systematically? *)
+        Exp.function_ (
+          List.mapi (fun i constructor_decl ->
+            let constr_name = constructor_decl.pcd_name.Asttypes.txt in
+            let nb_args = if construct_has_record constructor_decl then 1
+                          else construct_nb_args constructor_decl in
+            {
+              pc_lhs =
+                pattern_of_constr constr_name
+                  (if nb_args > 0 then
+                    Some (pattern_of_n_vars nb_args "x") else None) ;
+              pc_guard = None ;
+              pc_rhs =
+                let my_value =
+                  (* TODO: could we not do this systematically? *)
+                  if construct_has_record constructor_decl then
+                    exp_of_constr constr_name (Some (exp_of_name "x"))
+                  else if nb_args > 0 then
+                    exp_of_n_names nb_args "x"
+                  else exp_of_unit in
+                leftist_option_tree_mono_expr nb_consts i my_value
+            }
+          ) constructor_decls) ;
+        Exp.function_ (
+          List.mapi (fun i constructor_decl ->
+            let constr_name = constructor_decl.pcd_name.Asttypes.txt in
+            let nb_args = if construct_has_record constructor_decl then 1
+                          else construct_nb_args constructor_decl in
+            let patterned_vars = List.mapi (fun j _constructor_decl ->
+                if j = i then Some (nb_args, "x") else None
+              ) constructor_decls in
+            {
+              pc_lhs = leftist_option_tree_mono_pattern patterned_vars ;
+              pc_guard = None ;
+              pc_rhs =
                 if construct_has_record constructor_decl then
-                  exp_of_constr constr_name (Some (exp_of_name "x"))
-                else if nb_args > 0 then
-                  exp_of_n_names nb_args "x"
-                else exp_of_unit in
-              leftist_option_tree_mono_expr nb_consts i my_value
-          }) constructor_decls) ;
-        Exp.function_ ((List.mapi (fun i constructor_decl ->
-          let constr_name = constructor_decl.pcd_name.Asttypes.txt in
-          let nb_args = if construct_has_record constructor_decl then 1
-                        else construct_nb_args constructor_decl in
-          let patterned_vars = List.mapi (fun j _constructor_decl ->
-              if j = i then Some (nb_args, "x") else None
-            ) constructor_decls in
-          {
-            pc_lhs = leftist_option_tree_mono_pattern patterned_vars ;
-            pc_guard = None ;
-            pc_rhs =
-              if construct_has_record constructor_decl then
-                exp_of_name "x"
-              else exp_of_constr constr_name
-                (if nb_args > 0 then
-                   Some (exp_of_n_names nb_args "x") else None)
-          }) constructor_decls)) ]))
+                  exp_of_name "x"
+                else exp_of_constr constr_name
+                  (if nb_args > 0 then
+                     Some (exp_of_n_names nb_args "x") else None)
+            }
+          ) constructor_decls) ]))
 
 let ppps_of_type_declaration tdec =
   match extract_ident_attribute tdec.ptype_attributes with
@@ -615,24 +619,24 @@ let ppps_of_type_declaration tdec =
 
 let map_structure mapper str =
   let strs = Ast_mapper.default_mapper.Ast_mapper.structure mapper str in
-	(* Try to emit the new ppp definitions just after the corresponding type
+  (* Try to emit the new ppp definitions just after the corresponding type
      definition: *)
   List.fold_left (fun strs' str ->
-      match str.pstr_desc with
-      | Pstr_type (rec_flag, type_decls) ->
-        let vb_to_emit = ref [] in
-        let new_type_decls =
-          List.map (fun type_decl ->
-              let tdec, vbs = ppps_of_type_declaration type_decl in
-              vb_to_emit := List.rev_append vbs !vb_to_emit ;
-              tdec
-            ) type_decls in
-        let strs = Str.type_ rec_flag new_type_decls :: strs' in
-        if !vb_to_emit = [] then strs else
-          (Str.value Asttypes.Recursive !vb_to_emit) :: strs
-      | _ ->
-        str::strs'
-    ) [] strs |> List.rev
+    match str.pstr_desc with
+    | Pstr_type (rec_flag, type_decls) ->
+      let vb_to_emit = ref [] in
+      let new_type_decls =
+        List.map (fun type_decl ->
+          let tdec, vbs = ppps_of_type_declaration type_decl in
+          vb_to_emit := List.rev_append vbs !vb_to_emit ;
+          tdec
+        ) type_decls in
+      let strs = Str.type_ rec_flag new_type_decls :: strs' in
+      if !vb_to_emit = [] then strs else
+        (Str.value Asttypes.Recursive !vb_to_emit) :: strs
+    | _ ->
+      str::strs'
+  ) [] strs |> List.rev
 
 let ppp_mapper _argv =
   { Ast_mapper.default_mapper with
