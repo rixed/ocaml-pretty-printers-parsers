@@ -1220,13 +1220,16 @@ let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, 
 let sequence field_sep ((psi1 : 'a u), (m1 : 'a merge_u)) ((psi2 : 'b u), (m2 : 'b merge_u)) : (('a option * 'b option) u * ('a option * 'b option) merge_u) =
   (alternative field_sep psi1 psi2),
   (fun (v1 : ('a option * 'b option) option) (v2 : ('a option * 'b option) option) ->
-    if v1 = None && v2 = None then None else
-    Some (
-      let map_get f = function
-        | None -> None
-        | Some x -> f x in
+    let map_get f = function
+      | None -> None
+      | Some x -> f x in
+    (* In case both v1 and v2 are None we must still give m1 and m2 a chance to
+     * set a default value before returning None fir the whole pair: *)
+    match
       m1 (map_get fst v1) (map_get fst v2),
-      m2 (map_get snd v1) (map_get snd v2)))
+      m2 (map_get snd v1) (map_get snd v2) with
+    | None, None -> None
+    | a, b -> Some (a, b))
 
 let field eq sep id_sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
   (variant eq sep id_sep name ppp),
