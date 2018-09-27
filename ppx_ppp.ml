@@ -411,7 +411,7 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
           }] @ (
             (* We could have the name of the first missing field if we
              * matched against 'None, _', then 'Some _, None, _', etc *)
-            List.mapi (fun i (label_decl, _, rename) ->
+            List.mapi (fun i (_label_decl, _, rename) ->
               {
                 pc_lhs = leftist_tree_none_at nb_labels i ;
                 pc_guard = None ;

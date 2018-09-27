@@ -1,5 +1,5 @@
 top_srcdir = .
-WARNS      = -w -40
+WARNS      = -w -40+27
 override OCAMLOPTFLAGS += $(INCS) $(WARNS) -g -annot -I $(top_srcdir) -O2
 override OCAMLFLAGS    += $(INCS) $(WARNS) -g -annot -I $(top_srcdir)
 

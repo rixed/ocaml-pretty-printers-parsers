@@ -238,10 +238,7 @@ let remove_empty_lines ?(blanks=" \t") k =
 (* Look for pairs of matching Close/Open and indent them, leaving the Open at
  * the end of its line and making the corresponding Close at the beginning of
  * its. *)
-let reindent ?(indent="\t")
-             ?(blanks=" \t")
-             ?(pars=[ '(',')' ; '{','}' ; '[',']' ; '<','>' ])
-             ?(separators=":=") k =
+let reindent ?(indent="\t") ?(blanks=" \t") k =
   (* The number of currently opened groups: *)
   let depth = ref 0 in
   (* Tells if we just added the indentation at the beginning of the line, so
@@ -280,11 +277,11 @@ let reindent ?(indent="\t")
           had_indent := false ;
           output x ;
         )
-    | Token s -> (* Put some space around separators *)
+    | Token _ -> (* Put some space around separators *)
         output (Chr ' ') ;
         output x ;
         output (Chr ' ')
-    | Open s ->
+    | Open _ ->
         incr depth ;
         (* Adds space before the open group: *)
         if not !had_indent then output (Chr ' ') ;
@@ -395,13 +392,13 @@ let newline_at_end_of_file k =
 
 let prettifier
       ?blanks ?quotes ?escape_char
-      ?indent ?pars ?columns ?separators
+      ?indent ?columns ?separators
       ?opens ?closes ?tokens
       k =
   split_verbatim ?quotes ?escape_char (
     tokenize ?opens ?closes ?tokens (
       compress_blanks ?blanks (
-        reindent ?indent ?pars (
+        reindent ?indent (
           add_newlines ?columns ?blanks ?separators (
             remove_empty_lines ?blanks (
               no_trailing_blanks ?blanks (
@@ -409,11 +406,11 @@ let prettifier
 
 let prettify
       ?blanks ?quotes ?escape_char
-      ?indent ?pars ?columns ?separators
+      ?indent ?columns ?separators
       ?opens ?closes ?tokens =
   make_prettifier (
     prettifier
-      ?blanks ?quotes ?escape_char ?indent ?pars ?columns ?separators
+      ?blanks ?quotes ?escape_char ?indent ?columns ?separators
       ?opens ?closes ?tokens)
 
 (*$= prettify & ~printer:id
