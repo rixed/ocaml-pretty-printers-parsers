@@ -119,7 +119,7 @@ let pattern_unit = pattern_of_constr "()" None
 let value_binding_of_expr name expr =
   (* eta-expanse the applied [expr] *)
   let fun_expr = Exp.fun_ Asttypes.Nolabel None pattern_unit (Exp.apply expr [ Asttypes.Nolabel, exp_of_unit ]) in
-  Vb.mk ~attrs:[disable_warnings [8; 27; 39]] (pattern_of_var name) fun_expr
+  Vb.mk ~attrs:[disable_warnings [11; 12; 27; 39]] (pattern_of_var name) fun_expr
 
 let identifier_of_mod modident =
   Longident.flatten modident.Asttypes.txt |>
@@ -264,9 +264,25 @@ and leftist_tree_all_pattern ~options nb_vars =
   let prev = some_of_var 0 in
   loop true prev 1
 
+(* [nb_vars] is the number of variables in the leftist tree, and [none_pos] the index
+ * of the one missing. Notice that we also want to match the case where several might
+ * be missing, although it is enough to err on the first (or any) one.
+ * Also, when several fields are missing, it might happen that a whole branch of the
+ * tree is missing (Some (None, None) <=> None). Failing to match that would yield
+ * to elusive runtime match errors depending on what fields are missing. *)
 and leftist_tree_none_at nb_vars none_pos =
+  (* So each time we have "Some (None, _)" or "Some (_, None)" we want to also
+   * allow for "None". This will create some redundancy therefore the warning 12
+   * has to be disabled: *)
   let some_of p =
-    pattern_of_constr "Some" (Some p) in
+    match p.ppat_desc with
+    | Ppat_tuple [ { ppat_desc = Ppat_any ; _ } ;
+                   _ (* this we know can be nothing else than None *) ]
+    | Ppat_tuple [ _ ;
+                   { ppat_desc = Ppat_any ; _ } ] ->
+        Pat.or_ (pattern_of_constr "Some" (Some p))
+                pattern_none
+    | _ -> pattern_of_constr "Some" (Some p) in
   let pat_of i =
     if i = none_pos then pattern_none
     else Pat.any () in
@@ -304,6 +320,11 @@ let string_of_exp exp =
   | _ ->
     Printf.eprintf "Invalid ppp_rename: must provide a string constant.\n%!" ;
     "INVALID_PPP_RENAME"
+
+let assert_not_any =
+  { pc_lhs = Pat.any () ;
+    pc_guard = None ;
+    pc_rhs = Exp.assert_ (exp_of_bool false) }
 
 let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
   (* Some labels may be ignored: *)
@@ -361,7 +382,17 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
     and maybe_constr_record expr =
       match constr_name with
       | None -> expr
-      | Some cn -> exp_of_constr cn (Some expr) in
+      | Some cn -> exp_of_constr cn (Some expr)
+    (* If this is indeed the record attached to a constructor, it is safe to
+     * assume that there are other possible constructors (warning 11 is
+     * disabled in case there are only one). Those should in theory never be
+     * presented to this match, but to avoid a warning (and make errors easier
+     * to diagnose) crash when this is the case: *)
+    and maybe_ignore_other_constr =
+      match constr_name with
+      | None -> []
+      | Some _ -> [ assert_not_any ]
+    in
     let nb_labels = List.length not_ignored_labels in
     if nb_labels = 1 then (
       (* Special case: no need to go through a tuple of options, all we need
@@ -369,12 +400,12 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
       let label_decl, _, _ = List.hd not_ignored_labels in
       let label_name = label_decl.pld_name.Asttypes.txt in
       Exp.tuple [
-        Exp.function_ [
+        Exp.function_ ([
           {
             pc_lhs = maybe_constr_pattern (pattern_of_var "x") ;
             pc_guard = None ;
             pc_rhs = field_exp_of_name "x" label_name
-          }] ;
+          }] @ maybe_ignore_other_constr);
         Exp.function_ [
           {
             pc_lhs = pattern_of_var "x" ;
@@ -387,7 +418,7 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
     ) else (
       assert (nb_labels >= 2) ;
       Exp.tuple [
-        Exp.function_ [
+        Exp.function_ ([
           {
             pc_lhs = maybe_constr_pattern (pattern_of_var "x") ;
             pc_guard = None ;
@@ -396,8 +427,10 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
                 (List.map (fun (label_decl, _, _) ->
                   field_exp_of_name "x" label_decl.pld_name.Asttypes.txt)
                   not_ignored_labels)
-          }] ;
+          }] @ maybe_ignore_other_constr) ;
         Exp.function_ ([
+          (* First pattern match the case where we have all the fields (because
+           * they were present explicitly or had a default value: *)
           {
             pc_lhs = leftist_tree_all_pattern ~options:true nb_labels ;
             pc_guard = None ;
@@ -409,7 +442,8 @@ let exp_of_label_decls ?constr_name ~extensible impl_mod label_decls =
                   List.map default_of_field ignored_labels
                 ) None)
           }] @ (
-            (* We could have the name of the first missing field if we
+            (* Then all the patterns with missing required fields.
+             * We could have the name of the first missing field if we
              * matched against 'None, _', then 'Some _, None, _', etc *)
             List.mapi (fun i (_label_decl, _, rename) ->
               {
@@ -581,7 +615,12 @@ let exp_of_constructor_arguments impl_mod constructor_decls =
                   (if nb_args > 0 then
                      Some (exp_of_n_names nb_args "x") else None)
             }
-          ) constructor_decls) ]))
+          ) constructor_decls @ [
+            (* Although we cannot have another pattern here given the above
+             * patterns mirror comprehensively all the structures created by
+             * the parser above, let's make it crash otherwise, so that we are
+             * 200% sure any pattern failure come from missing fields in records: *)
+            assert_not_any ]) ]))
 
 let ppps_of_type_declaration tdec =
   match extract_ident_attribute tdec.ptype_attributes with
