@@ -11,9 +11,9 @@ SOURCES = $(PPP_SOURCES) PPP_Unix.ml
 .PHONY: clean distclean all check dep install uninstall reinstall
 
 all: .depend \
-		 ppx_ppp.opt ppx_test.opt ppx_test_source.ml \
-		 PPP.cma PPP.cmxa PPP-unix.cma PPP-unix.cmxa \
-		 pretty_please
+     ppx_ppp.opt ppx_test.opt ppx_test_source.ml \
+     PPP.cma PPP.cmxa PPP-unix.cma PPP-unix.cmxa \
+     pretty_please
 
 %.cmo %.annot: %.ml
 	ocamlfind ocamlc   $(OCAMLFLAGS) -package stdint -c $<
