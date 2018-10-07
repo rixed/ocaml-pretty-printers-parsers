@@ -211,10 +211,11 @@ let to_string ?(pretty=false) ppp v =
 
 let to_out_channel ?(pretty=false) ppp chan v =
   let ppp_ = ppp () in
-  ppp_.printer (fun s ->
-    (if pretty then PPP_prettify.prettify s else s) |>
+  if pretty then
+    to_string ~pretty ppp v |>
     output_string chan
-  ) v
+  else
+    ppp_.printer (output_string chan) v
 
 let to_stdout ?pretty ppp v = to_out_channel ?pretty ppp stdout v
 let to_stderr ?pretty ppp v = to_out_channel ?pretty ppp stderr v
