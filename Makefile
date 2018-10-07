@@ -3,7 +3,7 @@ WARNS      = -w -40+27
 override OCAMLOPTFLAGS += $(INCS) $(WARNS) -g -annot -I $(top_srcdir) -O2
 override OCAMLFLAGS    += $(INCS) $(WARNS) -g -annot -I $(top_srcdir)
 
-PPP_SOURCES = PPP.ml PPP_prettify.ml PPP_OCaml.ml PPP_JSON.ml PPP_CSV.ml
+PPP_SOURCES = PPP_prettify.ml PPP.ml PPP_OCaml.ml PPP_JSON.ml PPP_CSV.ml
 SOURCES = $(PPP_SOURCES) PPP_Unix.ml
 
 # Common rules

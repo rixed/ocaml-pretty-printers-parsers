@@ -201,19 +201,23 @@ let (>>:) ppp (f,f') =
 
 (* Various I/O functions *)
 
-let to_string ppp v =
+let to_string ?(pretty=false) ppp v =
   let buf = Buffer.create 100 in
   let o str = Buffer.add_string buf str in
   let ppp_ = ppp () in
   ppp_.printer o v ;
-  Buffer.contents buf
+  let s = Buffer.contents buf in
+  if pretty then PPP_prettify.prettify s else s
 
-let to_out_channel ppp chan v =
+let to_out_channel ?(pretty=false) ppp chan v =
   let ppp_ = ppp () in
-  ppp_.printer (output_string chan) v
+  ppp_.printer (fun s ->
+    (if pretty then PPP_prettify.prettify s else s) |>
+    output_string chan
+  ) v
 
-let to_stdout ppp v = to_out_channel ppp stdout v
-let to_stderr ppp v = to_out_channel ppp stderr v
+let to_stdout ?pretty ppp v = to_out_channel ?pretty ppp stdout v
+let to_stderr ?pretty ppp v = to_out_channel ?pretty ppp stderr v
 
 let string_reader s o l =
   if o >= String.length s then "" else
