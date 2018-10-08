@@ -362,7 +362,7 @@ let char_cst c : unit t =
   fun () ->
   { printer = (fun o () -> o s) ;
     scanner = (fun i o ->
-      if i o 1 <> s then parse_error o ("missing constant char "^ s)
+      if i o 1 <> s then parse_error o ("Missing constant char "^ s)
       else Ok ((), o + 1)) ;
     descr = fun _ -> s }
 
@@ -371,13 +371,13 @@ let char quote : char t =
   { printer = (fun o v -> o quote ; o (String.make 1 v) ; o quote) ;
     scanner = (fun i o ->
       let ql = String.length quote in
-      if i o ql <> quote then parse_error o "missing opening quote" else
+      if i o ql <> quote then parse_error o "Missing opening quote" else
       let o = o + ql in
       match i o 1 with
       | "" -> not_done o "character"
       | s ->
         let o = o + 1 in
-        if i o ql <> quote then parse_error o "missing closing quote" else
+        if i o ql <> quote then parse_error o "Missing closing quote" else
         Ok (s.[0], o+ql)) ;
     descr = fun _ -> "char" }
 
@@ -408,13 +408,13 @@ let string : string t =
         | Backslash, d when str_is_digit d ->
             if bsn >= 100 then ( (* we already had 2 digits *)
               let bsn = (bsn - 100) * 10 + digit_of d in
-              if bsn > 255 then parse_error o "invalid backslash sequence in string"
+              if bsn > 255 then parse_error o "Invalid backslash sequence in string"
               else loop (o+1) (Char.chr bsn :: l) (s+1) 0 Char
             ) else (
               (* 10+ so that we know when we have had 3 digits: *)
               loop (o+1) l s (10*bsn + digit_of d) Backslash
             )
-        | _ -> parse_error o "invalid character in string" (* everything else is game-over *)
+        | _ -> parse_error o "Invalid character in string" (* everything else is game-over *)
       in
       loop o [] 0 0 First) ;
     descr = fun _ -> "string" }
@@ -444,7 +444,7 @@ let identifier : string t =
           oo
       in
       let oo = loop o in
-      if oo > o then Ok (i o (oo-o), oo) else parse_error o "identifier") ;
+      if oo > o then Ok (i o (oo-o), oo) else parse_error o "Identifier") ;
     descr = fun _ -> "identifier" }
 (*$= identifier & ~printer:(function Error e -> string_of_error e | Ok (i, o) -> Printf.sprintf "(%s,%d)" i o)
   (Ok ("glop", 4)) (of_string identifier "glop" 0)
@@ -538,11 +538,11 @@ let seq name opn cls sep fold of_rev_list ppp =
         | Ok (x, o) ->
           trace "seq: found item, now looking for sep %S" sep ;
           parse_sep (x::prev) o
-        | Error _ as err ->
+        | Error (oo, _) as err ->
           if stream_starts_with i o cls then
             Ok (of_rev_list prev, o + String.length cls)
           else (
-            trace "seq: cannot parse item at %d" o ;
+            trace "seq: cannot parse item at %d (err at %d)" o oo ;
             err)
       in
       let o = skip_blanks i o in
@@ -1075,8 +1075,8 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                     Ok (v, cls_pos + cls_len)
                   else (
                     trace "union: garbage at end of value %S from offset %d" value oo ;
-                    parse_error oo (Printf.sprintf "Garbage at end of value for %S" name)
-                  ))
+                    parse_error oo
+                      (Printf.sprintf "Garbage at end of value for %S" name)))
               | _ -> parse_error cls_pos (Printf.sprintf "Expected closing of union %S" cls)))
           | _ -> parse_error o' (Printf.sprintf "Expected separator %S" eq)))
       | _ -> parse_error o (Printf.sprintf "Expected opening of union %S" opn)) ;
@@ -1215,7 +1215,7 @@ let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, 
         let o = skip_blanks i o in
         (match i o cls_len with
         | str when str = cls ->
-          (match res with None -> parse_error o "empty record"
+          (match res with None -> parse_error o "Empty record"
                         | Some r -> Ok (r, o + cls_len))
         | _ -> parse_error o (Printf.sprintf "Expected closing of record %S" cls))
       | _ -> parse_error o (Printf.sprintf "Expected opening of record %S" opn)) ;
@@ -1229,7 +1229,7 @@ let sequence field_sep ((psi1 : 'a u), (m1 : 'a merge_u)) ((psi2 : 'b u), (m2 : 
       | None -> None
       | Some x -> f x in
     (* In case both v1 and v2 are None we must still give m1 and m2 a chance to
-     * set a default value before returning None fir the whole pair: *)
+     * set a default value before returning None for the whole pair: *)
     match
       m1 (map_get fst v1) (map_get fst v2),
       m2 (map_get snd v1) (map_get snd v2) with
