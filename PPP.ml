@@ -220,7 +220,10 @@ let to_out_channel ?(pretty=false) ppp chan v =
 let to_stdout ?pretty ppp v = to_out_channel ?pretty ppp stdout v
 let to_stderr ?pretty ppp v = to_out_channel ?pretty ppp stderr v
 
-let string_reader s o l =
+(* if this string is part of another string we might want to offset the
+ * locations to pretend we are reading the original string: *)
+let string_reader ?(offset=0) s o l =
+  let o = o - offset in
   if o >= String.length s then "" else
   let len =
     if o + l > String.length s then String.length s - o else l in
@@ -1026,7 +1029,11 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
               | str when str = cls ->
                 trace "union: found cls %S at %d" cls cls_pos ;
                 let chop_str = i value_start (cls_pos - value_start) in
-                let _, value = chop_sub chop_str 0 (cls_pos - value_start) in
+                let skipped_left, value =
+                  chop_sub chop_str 0 (cls_pos - value_start) in
+                (* Keep value start up to date as we will need it to fix error
+                 * location: *)
+                let value_start = value_start + skipped_left in
                 trace "union: found value %S" value ;
                 (* Here we have an issue. We may fail to parse the value in
                  * case of extraneous groupings again. This is a bit annoying
@@ -1066,13 +1073,13 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                       trace "union: retry from %d after the opened group" o ;
                       try_ungroup (group::opened) i o)
                 in
-                let ii = string_reader value in
-                (match try_ungroup [] ii 0 with
+                let ii = string_reader ~offset:value_start value in
+                (match try_ungroup [] ii value_start with
                 | Error _ as e -> e
-                | Ok (v, oo) -> (* oo is the offset in the value only *)
-                  let oo = skip_blanks ii oo in
+                | Ok (v, oo) ->
+                  let oo = skip_blanks i oo in
                   (* We should have read everything *)
-                  if oo = String.length value then
+                  if oo = cls_pos then
                     Ok (v, cls_pos + cls_len)
                   else (
                     trace "union: garbage at end of value %S from offset %d" value oo ;
