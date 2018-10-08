@@ -1002,11 +1002,11 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
       | str when str = opn ->
         trace "union: found union opn %S" opn ;
         let o = o + opn_len in
-        let o = skip_blanks i o in
-        (match name_ppp_.scanner i o with
+        let name_start = skip_blanks i o in
+        (match name_ppp_.scanner i name_start with
         | Error _ as e -> e
         | Ok (name, o') ->
-          trace "union: found union name %S" name ;
+          trace "union: found union name %S at %d" name name_start ;
           (* Now skip the eq sign *)
           let o' = skip_blanks i o' in
           let eq_len = String.length eq in
@@ -1055,10 +1055,11 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                     (match opened_group (* FIXME: another type of groups here, with just "(",")" *) groupings i o with
                     | None ->
                       trace "union: but this is not a group opening. Game over!" ;
-                      (* If the error was a name error, set the actual end of value: *)
+                      (* If the error was a name error, set the actual start and end of value: *)
                       (match r with
-                      | o, UnknownField (n, _) ->
-                        Error (o, UnknownField (n, value_stop))
+                      | _, UnknownField (n, _) ->
+                        trace "union: subvalue failed with unknownfield %S at %d" n o ;
+                        unknown_field name_start value_stop n
                       | _ -> err)
                     | Some (group, o) ->
                       let o = skip_blanks i o in
@@ -1108,7 +1109,7 @@ let variant eq sep id_sep name (ppp : 'a t) : 'a u =
     o eq ;
     ppp_.printer o v),
   (fun n i o ->
-    if n <> name then unknown_field o o name
+    if n <> name then unknown_field o o n
     else let ppp_ = ppp () in ppp_.scanner i o),
   (fun depth ->
      let ppp_ = ppp () in
@@ -1191,7 +1192,7 @@ let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, 
         let o = skip_blanks i (value_start + opn_len) in
         let rec loop prev o =
           match nf_.scanner i o with
-          | Error (_, r) ->
+          | Error (_, r) as e ->
             (match extensible, r with
             | true, UnknownField (_, o2) ->
               (* If we got as far as parsing a name and isolating a value
@@ -1199,7 +1200,7 @@ let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, 
               next_value prev o2
             | _ ->
               (* Maybe it's an error, but maybe we are just done. *)
-              prev, o)
+              prev, o, e)
           | Ok (x, o) ->
             let prev' = merge prev (Some x) in
             next_value prev' o
@@ -1208,16 +1209,16 @@ let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, 
           (match i o sep_len with
           | str when str = sep ->
             loop prev (o + sep_len)
-          | _ -> prev, o)
+          | _ -> prev, o, parse_error o "Expected a separator")
         in
-        let res, o = loop None o in
+        let res, o, e = loop None o in
         (* Check that we are done *)
         let o = skip_blanks i o in
         (match i o cls_len with
         | str when str = cls ->
           (match res with None -> parse_error o "Empty record"
                         | Some r -> Ok (r, o + cls_len))
-        | _ -> parse_error o (Printf.sprintf "Expected closing of record %S" cls))
+        | _ -> e)
       | _ -> parse_error o (Printf.sprintf "Expected opening of record %S" opn)) ;
     descr = fun depth -> opn ^ descr (depth + 1) ^ cls }
 
