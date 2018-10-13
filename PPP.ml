@@ -432,7 +432,9 @@ let string : string t =
   (Ok ("\207", 6)) (of_string string "\"\\207\"" 0)
  *)
 
-(* C-like identifiers. Start with a letter of underscore, then can contain digits. *)
+(* C-like identifiers. Start with a letter or underscore, then can contain digits.
+ * As a nice addition, can also contains minus sign (frequently used in place
+ * of spaces, as are underscores) *)
 let identifier : string t =
   fun () ->
   { printer = (fun o x -> o x) ;
@@ -441,7 +443,7 @@ let identifier : string t =
         let s = i oo 1 in
         if s = "" then oo else
         let c = s.[0] in
-        if is_letter c || c = '_' || oo > o && is_digit c then
+        if is_letter c || c = '_' || oo > o && (is_digit c || c = '-') then
           loop (oo+1)
         else
           oo
