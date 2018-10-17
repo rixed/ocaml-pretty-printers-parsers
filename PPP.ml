@@ -563,7 +563,7 @@ let seq name opn cls sep fold of_rev_list ppp =
   (Ok (["a";"b";"cde"], 9)) \
     (of_string (seq "list" "[" "]" ";" List.fold_left List.rev identifier) "[a;b;cde]" 0)
   (Ok (["a";"b";"cde"], 9)) \
-    (of_string (seq "sequence" "" "" "--" List.fold_left List.rev identifier) "a--b--cde" 0)
+    (of_string (seq "sequence" "" "" "==" List.fold_left List.rev identifier) "a==b==cde" 0)
  *)
 
 (* Always allow blanks around the constant *)
