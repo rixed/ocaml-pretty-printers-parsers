@@ -25,13 +25,11 @@ let string_of_error ?(location_of_offset=string_of_int) (o, e) =
   | UnknownField (f, _) -> "Unknown field '"^ f ^"' at "^ location_of_offset o
   | NotDone s -> "Was expecting "^ s ^" at end of input"
 
-(* TODO: Maybe try to keep the two first best? *)
-let best_error e1 e2 =
-  match e1, e2 with
-  | (_, UnknownField _), _ -> e1
-  | _, (_, UnknownField _) -> e2
-  | (o1, _), (o2, _) ->
-    if o1 >= o2 then e1 else e2
+(* Favor e1 in case of draw *)
+let best_error (o1, _ as e1) (o2, _ as e2) =
+  trace "best_error: comparing %s and %s"
+    (string_of_error e1) (string_of_error e2) ;
+  if o2 > o1 then e2 else e1
 
 (* Some helpers: *)
 
@@ -1046,7 +1044,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                  * (((1,2))) as a int pair, we must try first with 3, then 2
                  * then 1 parentheses which will eventually succeed (notice 0
                  * parentheses would fail). *)
-                let rec try_ungroup opened i o =
+                let rec try_ungroup best_err opened i o =
                   trace "union: trying to parse value for label %S" name ;
                   match s name i o with
                   | Ok (v, o) ->
@@ -1058,25 +1056,30 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                       trace "union: Cannot close %d opened groups around value %S" (List.length opened) value ;
                       parse_error o "Expected closing group"
                     | Some oo -> Ok (v, oo))
-                  | Error r as err ->
-                    trace "union: cannot parse value from %d (%s)"
-                      o (string_of_error r) ;
+                  | Error r ->
+                    let best_err = best_error best_err r in
+                    trace "union: cannot parse value from %d (%s) (best error so far: %s)"
+                      o (string_of_error r) (string_of_error best_err) ;
                     (match opened_group (* FIXME: another type of groups here, with just "(",")" *) groupings i o with
                     | None ->
                       trace "union: but this is not a group opening. Game over!" ;
-                      (* If the error was a name error, set the actual start and end of value: *)
+                      (* If the error was a name error, set the name itself as the error position
+                       * (tather than the value): *)
                       (match r with
                       | _, UnknownField (n, _) ->
                         trace "union: subvalue failed with unknownfield %S at %d" n o ;
-                        unknown_field name_start value_stop n
-                      | _ -> err)
+                        (match unknown_field name_start value_stop n with
+                        | Error r -> Error (best_error best_err r)
+                        | _ -> assert false)
+                      | _ -> Error best_err)
                     | Some (group, o) ->
                       let o = skip_blanks i o in
                       trace "union: retry from %d after the opened group" o ;
-                      try_ungroup (group::opened) i o)
+                      try_ungroup best_err (group::opened) i o)
                 in
                 let ii = string_reader ~offset:value_start value in
-                (match try_ungroup [] ii value_start with
+                let best_err = -1, NotDone "no error" in
+                (match try_ungroup best_err [] ii value_start with
                 | Error _ as e -> e
                 | Ok (v, oo) ->
                   let oo = skip_blanks i oo in
