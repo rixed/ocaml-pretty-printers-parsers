@@ -1,5 +1,5 @@
 description = "Pretty-Printers/Parsers"
-version = "2.7.3"
+version = "2.7.4"
 archive(byte) = "PPP.cma"
 archive(native) = "PPP.cmxa"
 ppx = "./ppx_ppp.opt"
