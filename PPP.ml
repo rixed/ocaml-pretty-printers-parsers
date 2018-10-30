@@ -881,8 +881,8 @@ let string_print oc str = Printf.fprintf oc "%S" str
 let string_pair_print oc (s1, s2) = Printf.fprintf oc "(%S,%S)" s1 s2
 
 (* To be able to "reorder" records fields we need a function able to tell us
- * the length of a value, without knowing its type. If we have this, then we
- * can read a sequence of identifier * anything, and deal with it.
+ * the length of a value, without knowing its type. With it we can read a
+ * sequence of identifier * anything, and deal with it.
  * Delims are used to know where the value ends. *)
 let rec skip_any groupings delims i o =
   (* Here we only deal with a value up to next delimiter (or closing grouping),
