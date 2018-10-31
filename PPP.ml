@@ -1056,6 +1056,14 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                       trace "union: Cannot close %d opened groups around value %S" (List.length opened) value ;
                       parse_error o "Expected closing group"
                     | Some oo -> Ok (v, oo))
+                  (* If we receive an UnknownField error then there is no point
+                   * ungrouping further. Instead we want to report this error, with
+                   * the record label itself as the error: *)
+                  | Error (_, UnknownField (n, _)) ->
+                    trace "union: subvalue failed with unknownfield %S at %d" n o ;
+                    Error (best_error best_err
+                                      (name_start, UnknownField (n, value_stop)))
+                  (* In other error cases try to ungroup: *)
                   | Error r ->
                     let best_err = best_error best_err r in
                     trace "union: cannot parse value from %d (%s) (best error so far: %s)"
@@ -1063,15 +1071,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
                     (match opened_group (* FIXME: another type of groups here, with just "(",")" *) groupings i o with
                     | None ->
                       trace "union: but this is not a group opening. Game over!" ;
-                      (* If the error was a name error, set the name itself as the error position
-                       * (tather than the value): *)
-                      (match r with
-                      | _, UnknownField (n, _) ->
-                        trace "union: subvalue failed with unknownfield %S at %d" n o ;
-                        (match unknown_field name_start value_stop n with
-                        | Error r -> Error (best_error best_err r)
-                        | _ -> assert false)
-                      | _ -> Error best_err)
+                      Error best_err
                     | Some (group, o) ->
                       let o = skip_blanks i o in
                       trace "union: retry from %d after the opened group" o ;
@@ -1095,8 +1095,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
       | _ -> parse_error o (Printf.sprintf "Expected opening of union %S" opn)) ;
     descr = fun depth -> descr (depth + 1) }
 
-(* Combine two ppp into a pair of options. Notice that the most important
- * error, which is UnknownField, must bubble up so we can ignore it! *)
+(* Combine two ppp into a pair of options. *)
 let alternative var_sep (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option * 'b option) u =
   (fun name_ppp need_sep o (v1, v2) ->
     may (p1 name_ppp need_sep o) v1 ;
@@ -1105,10 +1104,11 @@ let alternative var_sep (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option *
   (fun n i o ->
     match s1 n i o with
     | Ok (x, o) -> Ok ((Some x, None), o)
-    | Error e1 ->
-      match s2 n i o with
+    | Error (_, UnknownField _) ->
+      (match s2 n i o with
       | Ok (x, o) -> Ok ((None, Some x), o)
-      | Error e2 -> Error (best_error e1 e2)),
+      | Error _ as err -> err)
+    | Error _ as err -> err),
   (fun depth ->
      if depth > 12 then "..."
      else id1 (depth+1) ^ var_sep ^ id2 (depth+1))
