@@ -42,7 +42,9 @@ let digit_of s = Char.code s.[0] - zero
 
 let chop_sub s b e =
   let len = String.length s in
-  if e > len || b > len || e < 0 || b < 0 then invalid_arg "chop_sub" ;
+  if e > len || b > len || e < 0 || b < 0 then
+    Printf.sprintf "chop_sub %S %d %d" s b e |>
+    invalid_arg ;
   (* Also return the nb of chars chopped at the beginning. Useful later to
    * compute offset in the user provided string from the offset in chopped
    * string. *)
