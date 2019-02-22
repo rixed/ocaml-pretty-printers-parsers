@@ -40,6 +40,12 @@ and t15 = T3 of t14 | T4 of string [@@ppp PPP_OCaml]
 (* Arrays: *)
 type t16 = int array [@@ppp PPP_OCaml]
 
+(* Deeper constructed types: *)
+type t17 = Oye of t6 [@@ppp PPP_OCaml]
+type t18 = OyeOye of t17 [@@ppp PPP_OCaml]
+type t19 = (t18 * t17) array [@@ppp PPP_OCaml]
+type t20 = { oyeoye : t18 ; oye : t17 [@ppp_default Oye PasGlop] } [@@ppp PPP_OCaml]
+
 (* TODO: Parametric types *)
 (*type 'a t16 = 'a list [@@ppp PPP_OCaml]*)
 
@@ -105,6 +111,8 @@ let () =
   test_string_conv t13_ppp_ocaml "{ addr = \"192.168.0.42\" }" ;
   test_string_conv t14_ppp_ocaml "T1 (T3 (T2 42))" ;
   test_string_conv t16_ppp_ocaml "[| 1; 2; 3 |]" ;
+  test_string_conv t19_ppp_ocaml "[|(OyeOye Oye PasGlop, Oye PasGlop)|]" ;
+  test_string_conv t20_ppp_ocaml "{ oyeoye = OyeOye Oye PasGlop; oye = Oye PasGlop }" ;
   test_string_conv export_msg_ppp_ocaml "{ columns = [ (\"h1\",false, AU64 [|1|] ) ]; first = 1 }" ;
   test_string_conv export_msg_ppp_ocaml "{ first=1; columns= [ (\"h1\",false,AU64 [|1|]) ]}" ;
   test_string_conv j1_ppp_json "{\"field1\": 42, \"field2\": \"bla\", \"field4\": 10}" ;

@@ -23,6 +23,8 @@ list of int: [1;2;3]
 {addr: string}: {addr="192.168.0.42"}
 T1 of T3 of T1 of T3 of T1 of T3 of ... | T4 of string | T2 of int | T4 of string | T2 of int | T4 of string | T2 of int: T1 T3 T2 42
 array of int: [|1;2;3|]
+array of (OyeOye of Oye of PasGlop | Glop of {a: int; b: Some of ... | None},Oye of PasGlop | Glop of {a: int; b: Some of ... | None}): [|(OyeOye Oye PasGlop ,Oye PasGlop )|]
+{oyeoye: OyeOye of Oye of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}; oye: Oye of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}}: {oyeoye=OyeOye Oye PasGlop ; oye=Oye PasGlop }
 {first: int; columns: list of (string,boolean,AU64 of array of uint64 | AU32 of array of uint32 | AFloat of array of float)}: {first=1; columns=[("h1",false,AU64 [|1|])]}
 {first: int; columns: list of (string,boolean,AU64 of array of uint64 | AU32 of array of uint32 | AFloat of array of float)}: {first=1; columns=[("h1",false,AU64 [|1|])]}
 {field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"x", "field4":10, "field5":false}
