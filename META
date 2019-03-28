@@ -1,5 +1,5 @@
 description = "Pretty-Printers/Parsers"
-version = "2.7.5"
+version = "2.8.0"
 archive(byte) = "PPP.cma"
 archive(native) = "PPP.cmxa"
 requires = "stdint"

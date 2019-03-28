@@ -2,7 +2,7 @@ opam-version: "1.2"
 name: "ppp"
 bug-reports: "https://github.com/rixed/ocaml-pretty-printers-parsers/issues"
 homepage: "https://github.com/rixed/ocaml-pretty-printers-parsers"
-version: "2.7.5"
+version: "2.8.0"
 maintainer: "Cedric Cellier <rixed@happyleptic.org>"
 authors: "Cedric Cellier <rixed@happyleptic.org>"
 build: [ [make] ]
