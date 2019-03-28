@@ -2,8 +2,11 @@ description = "Pretty-Printers/Parsers"
 version = "2.7.5"
 archive(byte) = "PPP.cma"
 archive(native) = "PPP.cmxa"
-ppx = "./ppx_ppp.opt"
 requires = "stdint"
+
+package "ppx" (
+  ppx = "./ppx_ppp.opt"
+)
 
 package "unix" (
   archive(byte) = "PPP-unix.cma"
