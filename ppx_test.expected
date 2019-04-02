@@ -17,7 +17,8 @@ Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (st
 (int,string,boolean,float): (1,"2",true,4.0)
 (int,string,boolean,float): (1," escaped:\" ",true,0.0)
 {u40: uint40; i48: int48; u56: uint56}: {u40=42190; i48=-42; u56=429000}
-{foo10: int; bar10: hashtbl of string=>int}: {foo10=4; bar10={"glop"=>42;"pas"=>1}}
+{foo10: int; bar10: hashtbl of list of string=>int}: {foo10=4; bar10={["pas"]=>1;["glop"]=>42;[]=>0}}
+{foo10: int; bar10: hashtbl of list of string=>int}: {foo10=4; bar10={[]=>1}}
 list of int: [1;2;3]
 {f1: list of int}: {f1=[1;2;3]}
 {addr: string}: {addr="192.168.0.42"}
