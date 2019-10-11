@@ -28,13 +28,13 @@ PPP.cmxa: $(PPP_SOURCES:.ml=.cmx)
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -a -package stdint $^ -o $@
 
 PPP.cma: $(PPP_SOURCES:.ml=.cmo)
-	ocamlfind ocamlc   $(OCAMLFLAGS) -a -linkpkg -package stdint -custom $^ -o $@
+	ocamlfind ocamlc   $(OCAMLFLAGS) -a -package stdint -custom $^ -o $@
 
 PPP-unix.cmxa: PPP_Unix.cmx
 	ocamlfind ocamlopt $(OCAMLOPTFLAGS) -a -package unix $^ -o $@
 
 PPP-unix.cma: PPP_Unix.cmo
-	ocamlfind ocamlc   $(OCAMLFLAGS) -a -linkpkg -package unix -custom $^ -o $@
+	ocamlfind ocamlc   $(OCAMLFLAGS) -a -package unix -custom $^ -o $@
 
 # PPX
 
