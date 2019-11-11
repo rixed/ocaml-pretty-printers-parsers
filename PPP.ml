@@ -1296,7 +1296,7 @@ let hashtbl opn cls sep kv_sep pppk pppv =
     Hashtbl.fold (fun k v i -> f i (k, v)) h init
   and of_rev_list l =
     let h = Hashtbl.create 11 in
-    List.iter (fun (k, v) -> Hashtbl.replace h k v) l ;
+    List.iter (fun (k, v) -> Hashtbl.add h k v) l ;
     h in
   let ppp = pppk +- kv_sep ++ pppv in
   seq "hashtbl" opn cls sep fold of_rev_list ppp
