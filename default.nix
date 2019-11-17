@@ -2,13 +2,13 @@
 
 stdenv.mkDerivation rec {
   pname = "ocaml${ocaml.version}-pretty-printers-parsers";
-  version = "2.7.5";
+  version = "2.8.2";
 
   src = fetchFromGitHub {
     owner = "rixed";
     repo = "ocaml-pretty-printers-parsers";
-    rev = "v${version}";
-    sha256 = "06kk2cvnfpqhk3l7d1gl43jaarpgizsilag56cm1jq6yyp8zb2yg";
+    rev = "v2.8.2";
+    sha256 = "0h35cwvg1kprj7nayy722was5aj1hb0n4s323p8mqr70qg99ci9n";
   };
 
   buildInputs = [ ocaml findlib ppx_tools stdint ];
