@@ -10,30 +10,31 @@ let exp_todo n =
 let extract_ident_attribute attrs =
   let rec loop mods extensible others = function
     | [] -> mods, extensible, List.rev others
-    | ({ Asttypes.txt = "ppp" ; _ },
-       (* Match identifier (to get module name for @@ppp *)
-       PStr [
-         { pstr_desc =
-             Pstr_eval ({
-               pexp_desc =
-                 Pexp_construct (ident, _) ;
-               _ }, _) ;
-           _ }
-       ])::rest ->
-      loop (ident::mods) extensible others rest
-    | ({ Asttypes.txt = "ppp_extensible" ; _ }, PStr [])::rest ->
-      loop mods true others rest
-    | attr::rest ->
-      loop mods extensible (attr :: others) rest in
+    | { attr_name = { Asttypes.txt = "ppp" ; _ } ;
+        attr_payload =
+         (* Match identifier (to get module name for @@ppp *)
+         PStr [
+           { pstr_desc =
+               Pstr_eval ({
+                 pexp_desc =
+                   Pexp_construct (ident, _) ;
+                 _ }, _) ;
+             _ } ] ;
+        _ } :: rest ->
+        loop (ident::mods) extensible others rest
+    | { attr_name = { Asttypes.txt = "ppp_extensible" ; _ } ;
+        attr_payload = PStr [] ; _ } :: rest ->
+        loop mods true others rest
+    | attr :: rest ->
+        loop mods extensible (attr :: others) rest in
   loop [] false [] attrs
 
 let extract_expr_attribute n attrs =
   let rec loop others = function
     | [] -> None
-    | ({ Asttypes.txt ; _ }, (* Match expressions (to get default values *)
-       PStr [
-         { pstr_desc = Pstr_eval (exp, _) ; _ }
-       ] )::rest when txt = n ->
+    | { attr_name = { Asttypes.txt ; _ } ; (* Match expressions (to get default values *)
+        attr_payload = PStr [ { pstr_desc = Pstr_eval (exp, _) ; _ } ] ;
+        _ } :: rest when txt = n ->
       Some (exp, List.rev_append others rest)
     | x::rest ->
       loop (x :: others) rest in
@@ -48,9 +49,10 @@ let ident_of_name name =
 (* returns an attribute *)
 let disable_warnings ns =
   let v = List.fold_left (fun s n -> s^"-"^ string_of_int n) "" ns in
-  loc_of "ocaml.warning",
-  PStr [ (
-    Str.eval (Exp.constant (Pconst_string (v, None)))) ]
+  { attr_name = loc_of "ocaml.warning" ;
+    attr_payload =
+      PStr [ (Str.eval (Exp.constant (Pconst_string (v, None)))) ] ;
+    attr_loc = Location.none }
 
 let exp_of_constr name opt =
   Exp.construct (ident_of_name name) opt

@@ -769,7 +769,7 @@ let float nan inf minf : float t =
         | _ -> oo, s, n, sc, es, exp
       in
       if stream_starts_with i o nan then
-        Ok (Pervasives.nan, o + String.length nan)
+        Ok (Stdlib.nan, o + String.length nan)
       else if stream_starts_with i o inf then
         Ok (infinity, o + String.length inf)
       else if stream_starts_with i o minf then
