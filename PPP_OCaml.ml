@@ -103,7 +103,8 @@ let delims = [ "," ; ";" ; "=>" ]
 let record ?extensible x =
   PPP.record ?extensible "{" "}" "=" ";" groupings delims PPP.identifier x
 let (<->) x y = PPP.sequence "; " x y
-let field ?default name x = PPP.field "=" "; " ": " ?default name x
+let field ?default name x =
+  PPP.field "=" "; " ": " ?default_in:default name x
 
 let union x = PPP.union "" "" "" groupings delims PPP.identifier x
 let (|||) x y = PPP.alternative " | " x y

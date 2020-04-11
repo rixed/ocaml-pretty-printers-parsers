@@ -28,20 +28,20 @@ array of (OyeOye of Oye of PasGlop | Glop of {a: int; b: Some of ... | None},Oye
 {oyeoye: OyeOye of Oye of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}; oye: Oye of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (string,int,boolean) | Baz | None}}: {oyeoye=OyeOye Oye PasGlop ; oye=Oye PasGlop }
 {first: int; columns: list of (string,boolean,AU64 of array of uint64 | AU32 of array of uint32 | AFloat of array of float)}: {first=1; columns=[("h1",false,AU64 [|1|])]}
 {first: int; columns: list of (string,boolean,AU64 of array of uint64 | AU32 of array of uint32 | AFloat of array of float)}: {first=1; columns=[("h1",false,AU64 [|1|])]}
-{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"x", "field4":10, "field5":false}
-{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"z", "field4":null, "field5":false}
-{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"x", "field4":1, "field5":true}
-{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":15, "field2":" escaped:\" ", "field3":"x", "field4":1, "field5":false}
+{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field4":10}
+{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field3":"z", "field4":null}
+{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field1":42, "field2":"bla", "field4":1, "field5":true}
+{field1: int; field2: string; field3: char; field4: int or null; field5: boolean or null}: {"field2":" escaped:\" ", "field4":1}
 NoArg of null | Arg of int: {"NoArg":null}
 NoArg of null | Arg of int: {"Arg":42}
-{baz: J31 of null | J32 of string}: {"baz":{"J31":null}}
+{baz: J31 of null | J32 of string}: {}
 list of int: [42,12]
 list of int: [42,12]
 list of int: [42,12]
 list of int: [42,12]
 list of int: [42,12]
 list of int: [42,12]
-{mandatory: int; optional: string}: {"mandatory":1, "optional":"default"}
+{mandatory: int; optional: string}: {"mandatory":1}
 {mandatory: int; optional: string}: {"mandatory":1, "optional":"present"}
 {bar: int; baz: string}: {"bar":42, "baz":"glop"}
 {a: int; b: float or null}: {"a":42, "b":1.0}

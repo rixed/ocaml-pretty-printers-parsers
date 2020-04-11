@@ -987,7 +987,8 @@ let skip_closed_groups opened i o =
  * based on the name. In both case the field combinator returns an
  * optional value depending if the field name match or not. *)
 type 'a u =
-  (string t -> bool -> 'a printer) *  (* name ppp, bool is: do we need a separator? *)
+  (string t (* name ppp *) -> bool (* do we need a separator? *) ->
+    (writer -> 'a -> bool) (* like an 'a printer but returns if there was any output *)) *
   (string -> 'a scanner) *  (* string is: field value that's going to be read *)
   (int -> string) (* how to build the type name *)
 
@@ -996,7 +997,7 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
   let name_ppp_ = name_ppp () in
   { printer = (fun o x ->
       o opn ;
-      p name_ppp false o x ;
+      p name_ppp false o x |> ignore ;
       o cls) ;
     scanner = (fun i union_start ->
       let opn_len = String.length opn
@@ -1100,9 +1101,13 @@ let union opn cls eq groupings delims name_ppp (p, s, descr : 'a u) : 'a t =
 (* Combine two ppp into a pair of options. *)
 let alternative var_sep (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option * 'b option) u =
   (fun name_ppp need_sep o (v1, v2) ->
-    may (p1 name_ppp need_sep o) v1 ;
-    let need_sep = need_sep || v1 <> None in
-    may (p2 name_ppp need_sep o) v2),
+    let output need_sep p o = function
+      | None -> need_sep
+      | Some v ->
+          let had_output = p name_ppp need_sep o v in
+          need_sep || had_output in
+    let need_sep = output need_sep p1 o v1 in
+    output need_sep p2 o v2),
   (fun n i o ->
     match s1 n i o with
     | Ok (x, o) -> Ok ((Some x, None), o)
@@ -1115,13 +1120,15 @@ let alternative var_sep (p1, s1, id1 : 'a u) (p2, s2, id2 : 'b u) : ('a option *
      if depth > 12 then "..."
      else id1 (depth+1) ^ var_sep ^ id2 (depth+1))
 
-let variant eq sep id_sep name (ppp : 'a t) : 'a u =
+let variant eq sep id_sep ?default name (ppp : 'a t) : 'a u =
   (fun name_ppp need_sep o v ->
-    if need_sep then o sep ;
-    let name_ppp_ = name_ppp () and ppp_ = ppp() in
-    name_ppp_.printer o name ;
-    o eq ;
-    ppp_.printer o v),
+    if default = Some v then false else (
+      if need_sep then o sep ;
+      let name_ppp_ = name_ppp () and ppp_ = ppp () in
+      name_ppp_.printer o name ;
+      o eq ;
+      ppp_.printer o v ;
+      true)),
   (fun n i o ->
     if n <> name then unknown_field o o n
     else let ppp_ = ppp () in ppp_.scanner i o),
@@ -1194,7 +1201,7 @@ let record ?(extensible=false) opn cls eq sep groupings delims name_ppp ((p, s, 
   let nf_ = nf () in
   { printer = (fun o v ->
       o opn ;
-      p name_ppp false o v ;
+      p name_ppp false o v |> ignore ;
       o cls) ;
     scanner = (fun i o ->
       let value_start = skip_blanks i o in
@@ -1251,11 +1258,11 @@ let sequence field_sep ((psi1 : 'a u), (m1 : 'a merge_u)) ((psi2 : 'b u), (m2 : 
     | None, None -> None
     | a, b -> Some (a, b))
 
-let field eq sep id_sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
-  (variant eq sep id_sep name ppp),
+let field eq sep id_sep ?default_in ?default_out name (ppp : 'a t) : ('a u * 'a merge_u) =
+  (variant eq sep id_sep ?default:default_out name ppp),
   (fun r1 r2 ->
     if r2 = None then (
-      if r1 = None then default else r1
+      if r1 = None then default_in else r1
     ) else r2)
 
 (*$inject
@@ -1266,13 +1273,13 @@ let field eq sep id_sep ?default name (ppp : 'a t) : ('a u * 'a merge_u) =
     record "{" "}" "=" ";" groupings delims identifier (
       field "=" "; " ": " "name" string <->
       field "=" "; " ": " "age" int <->
-      field "=" "; " ": " ~default:true "male" bool) >>:
+      field "=" "; " ": " ~default_in:true ~default_out:true "male" bool) >>:
       ((fun { name ; age ; male } -> Some (Some name, Some age), Some male),
        (function (Some (Some name, Some age), Some male) -> { name ; age ; male }
                | _ -> raise (MissingRequiredField "?")))
  *)
 (*$= person & ~printer:id
-  "{name=\"John\"; age=41; male=true}" (to_string person { name = "John"; age = 41; male = true })
+  "{name=\"John\"; age=41}" (to_string person { name = "John"; age = 41; male = true })
  *)
 (*$= person & ~printer:(function Error e -> string_of_error e | Ok (p, o) -> Printf.sprintf "(%s, %d)" (to_string person p) o)
   (Ok ({ name = "John"; age = 41; male = true }, 30)) \
@@ -1314,8 +1321,8 @@ let hashtbl opn cls sep kv_sep pppk pppv =
     Hashtbl.add h 111 { name = "Jena"; age = 41; male = false } ; \
     Hashtbl.add h 222 { name = "Bill"; age = 25; male = true } ; \
     to_string phonebook h in \
-  s = "{111:{name=\"Jena\"; age=41; male=false};222:{name=\"Bill\"; age=25; male=true}}" || \
-  s = "{222:{name=\"Bill\"; age=25; male=true};111:{name=\"Jena\"; age=41; male=false}}"
+  s = "{111:{name=\"Jena\"; age=41; male=false};222:{name=\"Bill\"; age=25}}" || \
+  s = "{222:{name=\"Bill\"; age=25};111:{name=\"Jena\"; age=41; male=false}}"
  *)
 
 (* References: mostly ignore them *)
