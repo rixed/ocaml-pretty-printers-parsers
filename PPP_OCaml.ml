@@ -112,14 +112,14 @@ let variant name x = PPP.variant " " "" " of " name x
 
 let result ok_ppp err_ppp = union (
   variant "Ok" ok_ppp |||
-  variant "Err" err_ppp) >>:
+  variant "Error" err_ppp) >>:
   ((function Ok x -> Some x, None
            | Error e -> None, Some e),
    (function Some x, _-> Ok x
            | _, Some e -> Error e
            | _ -> assert false))
 (*$= result & ~printer:(printer_of_ppp (result int string))
-  (Ok (Error "test", 10)) (of_string (result int string) "Err \"test\"" 0)
+  (Ok (Error "test", 12)) (of_string (result int string) "Error \"test\"" 0)
   (Ok (Ok 42, 5)) (of_string (result int string) "Ok 42" 0)
  *)
 
