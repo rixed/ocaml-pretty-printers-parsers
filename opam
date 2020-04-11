@@ -1,6 +1,6 @@
 opam-version: "2.0"
 name: "ppp"
-version: "2.8.2"
+version: "2.8.3"
 synopsis: "Generation of parsers and pretty printers from OCaml types"
 bug-reports: "https://github.com/rixed/ocaml-pretty-printers-parsers/issues"
 homepage: "https://github.com/rixed/ocaml-pretty-printers-parsers"
