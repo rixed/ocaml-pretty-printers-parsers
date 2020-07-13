@@ -882,11 +882,22 @@ let list_print ep oc lst =
 let string_print oc str = Printf.fprintf oc "%S" str
 let string_pair_print oc (s1, s2) = Printf.fprintf oc "(%S,%S)" s1 s2
 
+let possible_word_boundary ?prev i o =
+  let is_char c =
+    assert (String.length c = 1) ;
+    let c = c.[0] in
+    (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+    c = '_'
+  in
+  match prev with
+  | None -> true
+  | Some p -> not (is_char (i o 1) && is_char p)
+
 (* To be able to "reorder" records fields we need a function able to tell us
  * the length of a value, without knowing its type. With it we can read a
  * sequence of identifier * anything, and deal with it.
  * Delims are used to know where the value ends. *)
-let rec skip_any groupings delims i o =
+let rec skip_any groupings delims ?prev i o =
   (* Here we only deal with a value up to next delimiter (or closing grouping),
    * but if we encounter a group opening we switch to skip_group which will
    * (recursively) skips as many values to reach the end of the group. *)
@@ -896,22 +907,27 @@ let rec skip_any groupings delims i o =
   if c = "\"" then (
     trace "skip_any: found a string at %d, skipping it." o ;
     skip_string i (o+1)) else
-  if List.exists (stream_starts_with i o) delims then (
-    trace "skip_any: found a delimiter at %d" o ;
-    Some o) else
-  if List.exists (fun (_, cls) -> stream_starts_with i o cls) groupings then (
-    (* Ok but this value can be itself in an outside group so group ends
-     * must count as delimiters: *)
-    trace "skip_any: found the end of an enclosing group at %d" o ;
-    Some o) else
-  match List.find (fun (opn, _) -> stream_starts_with i o opn) groupings with
-  | exception Not_found ->
+  if possible_word_boundary ?prev i o then
+    if List.exists (stream_starts_with i o) delims then (
+      trace "skip_any: found a delimiter at %d: %S"
+        o (List.find (stream_starts_with i o) delims) ;
+      Some o) else
+    if List.exists (fun (_, cls) -> stream_starts_with i o cls) groupings then (
+      (* Ok but this value can be itself in an outside group so group ends
+       * must count as delimiters: *)
+      trace "skip_any: found the end of an enclosing group at %d: %S"
+        o (snd (List.find (fun (_, cls) -> stream_starts_with i o cls) groupings)) ;
+      Some o) else
+    match List.find (fun (opn, _) -> stream_starts_with i o opn) groupings with
+    | exception Not_found ->
+      (* Not a group: this char is part of the value that we skip *)
+      (skip_any [@tailcall]) groupings delims ~prev:c i (o+1)
+    | opn, cls ->
+      trace "skip_any: found a %S,%S group starting at %d" opn cls o ;
+      skip_group cls groupings delims i (o + String.length opn)
+  else
     (* Not a group: this char is part of the value that we skip *)
-    (* FIXME: this non-tail recursion is now much too slow *)
-    skip_any groupings delims i (o+1)
-  | opn, cls ->
-    trace "skip_any: found a %S,%S group starting at %d" opn cls o ;
-    skip_group cls groupings delims i (o + String.length opn)
+    (skip_any [@tailcall]) groupings delims ~prev:c i (o+1)
 
 (* Like skip_any but skip a sequence of values, as far as closing the opened group: *)
 (* FIXME: skip_any called in non-tail position *)
