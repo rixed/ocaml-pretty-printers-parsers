@@ -24,7 +24,7 @@ type t7 = Zap of { a: t6 option } [@@ppp PPP_OCaml]
 type t8 = int * string * bool * float [@@ppp PPP_OCaml]
 
 open Stdint
-type t9 = { u40 : uint40 ; i48 : int48 ; u56 : uint56 } [@@ppp PPP_OCaml]
+type t9 = { u40 : uint40 ; i48 : int48 ; u24 : uint24 ; u56 : uint56 } [@@ppp PPP_OCaml]
 
 type t10 = { foo10 : int ; bar10 : (string list, int) Hashtbl.t } [@@ppp PPP_OCaml]
 
@@ -104,7 +104,7 @@ let () =
   test_string_conv B.t3_ppp_ocaml "{ bar =true; recursive=[ {foo=1; bar=true; recursive=[]} ] }" ;
   test_string_conv t8_ppp_ocaml "(1, \"2\", true, 4.)" ;
   test_string_conv t8_ppp_ocaml "(1, \" escaped:\\\" \", true, 0)" ;
-  test_string_conv t9_ppp_ocaml "{u40 = 42190; u56=429000 ; i48 = -42 }" ;
+  test_string_conv t9_ppp_ocaml "{u40 = 42190; u56=429000 ; i48 = -42 ; u24 = 1 }" ;
   test_string_conv t10_ppp_ocaml "{foo10 = 4; bar10= { [\"glop\"]=>42 ; [\"pas\"]=>1; []=>0}}" ;
   test_string_conv t10_ppp_ocaml "{foo10 = 4; bar10 = {[]=>1}}" ;
   test_string_conv t11_ppp_ocaml "[1; 2; 3]" ;
