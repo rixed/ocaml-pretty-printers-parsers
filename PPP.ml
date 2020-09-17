@@ -690,6 +690,18 @@ let uint32 : uint32 t =
     scanner = (let open Uint32 in generic_int_scanner of_int add mul zero neg) ;
     descr = fun _ -> "uint32" }
 
+let int24 : int24 t =
+  fun () ->
+  { printer = (fun o v -> o (Int24.to_string v)) ;
+    scanner = (let open Int24 in generic_int_scanner of_int add mul zero neg) ;
+    descr = fun _ -> "int24" }
+
+let uint24 : uint24 t =
+  fun () ->
+  { printer = (fun o v -> o (Uint24.to_string v)) ;
+    scanner = (let open Uint24 in generic_int_scanner of_int add mul zero neg) ;
+    descr = fun _ -> "uint24" }
+
 let int16 : int16 t =
   fun () ->
   { printer = (fun o v -> o (Int16.to_string v)) ;
@@ -1361,6 +1373,8 @@ struct
   let uint8 = uint8
   let int16 = int16
   let uint16 = uint16
+  let int24 = int24
+  let uint24 = uint24
   let int32 = int32
   let uint32 = uint32
   let int40 = int40
