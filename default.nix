@@ -2,7 +2,7 @@
 
 stdenv.mkDerivation rec {
   pname = "ocaml${ocaml.version}-pretty-printers-parsers";
-  version = "2.8.3";
+  version = "2.8.4";
 
   src = fetchFromGitHub {
     owner = "rixed";
