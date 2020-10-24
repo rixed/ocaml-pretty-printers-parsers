@@ -749,10 +749,16 @@ let int : int t =
   is_error (of_string int "+glop" 0)
  *)
 
-(* Some languages (JSON...) forbids "42." but want "42.0" while all accept "42.0" *)
+(* Print the float with enough decimal places to be read back, while avoiding
+ * adding many garbage digits at the end.
+ * Also avoids a trailing decimal dot, which JSON format won't accept.
+ * Taken from OCaml toplevel code (typing/oprint.ml, float_repr): *)
 let my_string_of_float f =
-  let s = string_of_float f in
-  if s.[ String.length s - 1 ] = '.' then s ^ "0" else s
+  let s1 = Printf.sprintf "%.12g" f in
+  if f = float_of_string s1 then s1 else
+  let s2 = Printf.sprintf "%.15g" f in
+  if f = float_of_string s2 then s2 else
+  Printf.sprintf "%.18g" f
 
 (* General format: [sign] digits ["." [FFF]] [e [sign] EEE] *)
 type float_part = IntStart | Int | Frac | ExpStart | Exp

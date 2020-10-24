@@ -14,8 +14,8 @@ Zap of {a: Some of PasGlop | Glop of {a: int; b: Some of Foo of int | Bar of (st
 {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {...}}}}}: {foo=42; bar=false; recursive=[]}
 {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {...}}}}}: {foo=42; bar=true; recursive=[]}
 {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {foo: int; bar: boolean; recursive: list of {...}}}}}: {foo=17; bar=true; recursive=[{foo=1; bar=true; recursive=[]}]}
-(int,string,boolean,float): (1,"2",true,4.0)
-(int,string,boolean,float): (1," escaped:\" ",true,0.0)
+(int,string,boolean,float): (1,"2",true,4)
+(int,string,boolean,float): (1," escaped:\" ",true,0)
 {u40: uint40; i48: int48; u24: uint24; u56: uint56}: {u40=42190; i48=-42; u24=1; u56=429000}
 {foo10: int; bar10: hashtbl of list of string=>int}: {foo10=4; bar10={["pas"]=>1;["glop"]=>42;[]=>0}}
 {foo10: int; bar10: hashtbl of list of string=>int}: {foo10=4; bar10={[]=>1}}
@@ -44,7 +44,7 @@ list of int: [42,12]
 {mandatory: int; optional: string}: {"mandatory":1}
 {mandatory: int; optional: string}: {"mandatory":1, "optional":"present"}
 {bar: int; baz: string}: {"bar":42, "baz":"glop"}
-{a: int; b: float or null}: {"a":42, "b":1.0}
+{a: int; b: float or null}: {"a":42, "b":1}
 {a: int; b: float or null}: {"a":42, "b":null}
 {a: int; b: float or null}: {"a":42, "b":"nan"}
 {a: int; b: float or null}: {"a":42, "b":"inf"}
@@ -52,11 +52,11 @@ list of int: [42,12]
 j8 null -> none
 j8 null -> nan
 j8 null -> -inf
-{foo: int; hash: hashtbl of "int":float}: {"foo":42, "hash":{"34":"inf","42":42.0}}
+{foo: int; hash: hashtbl of "int":float}: {"foo":42, "hash":{"34":"inf","42":42}}
 {hash: hashtbl of string:boolean}: {"hash":{"foo":true,"bar":false}}
 PasJlop of null | Jlop of {c: int; d: {a: int; b: float or null} or null}: {"Jlop":{"c":1, "d":null}}
 AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AFloat":[26.3129910322,93.4604360475]}
 AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float: {"AU64":[1493409971653419,1493409400273526]}
 {first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":1, "columns":[["h1",false,{"AU64":[1]}]]}
 {first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":1, "columns":[["h1",false,{"AU64":[1]}]]}
-{first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":583, "columns":[["h1",false,{"AU64":[1493409900015801,1493409342783959]}],["h2",false,{"AU64":[1493409971653419,1493409400273526]}],["h3",false,{"AFloat":[26.3129910322,93.4604360475]}],["h4",false,{"AFloat":[1949.54835042,225383.363907]}],["h5",false,{"AU32":[50,50]}],["h6",false,{"AU32":[72,72]}]]}
+{first: int; columns: list of [string,boolean,AU64 of list of uint64 | AU32 of list of uint32 | AFloat of list of float]}: {"first":583, "columns":[["h1",false,{"AU64":[1493409900015801,1493409342783959]}],["h2",false,{"AU64":[1493409971653419,1493409400273526]}],["h3",false,{"AFloat":[26.3129910322,93.4604360475]}],["h4",false,{"AFloat":[1949.54835042000013,225383.363907]}],["h5",false,{"AU32":[50,50]}],["h6",false,{"AU32":[72,72]}]]}
