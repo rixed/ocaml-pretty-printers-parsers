@@ -51,7 +51,7 @@ let disable_warnings ns =
   let v = List.fold_left (fun s n -> s^"-"^ string_of_int n) "" ns in
   { attr_name = loc_of "ocaml.warning" ;
     attr_payload =
-      PStr [ (Str.eval (Exp.constant (Pconst_string (v, None)))) ] ;
+      PStr [ (Str.eval (Exp.constant (Pconst_string (v, Location.none, None)))) ] ;
     attr_loc = Location.none }
 
 let exp_of_constr name opt =
@@ -320,7 +320,7 @@ and leftist_tree_all_expr ~options exps =
 
 let string_of_exp exp =
   match exp.pexp_desc with
-  | Pexp_constant (Pconst_string (s, _)) -> s
+  | Pexp_constant (Pconst_string (s, _, _)) -> s
   | _ ->
     Printf.eprintf "Invalid ppp_rename: must provide a string constant.\n%!" ;
     "INVALID_PPP_RENAME"
